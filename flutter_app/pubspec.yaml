@@ -27,7 +27,7 @@ dependencies:
   web_socket_channel: ^3.0.2
   
   # 摇杆控制
-  flutter_joystick: ^0.3.0
+  flutter_joystick: ^0.2.2
   
   # 语音识别（手机端）
   speech_to_text: ^7.0.0
