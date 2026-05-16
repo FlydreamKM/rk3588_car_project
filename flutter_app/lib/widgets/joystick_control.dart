@@ -49,8 +49,6 @@ class _JoystickControlState extends State<JoystickControl> {
           },
           onStickDragEnd: () {
             setState(() {
-              _x = 0;
-              _y = 0;
               _currentAction = 'stop';
             });
             context.read<RobotProvider>().sendControl('stop');
