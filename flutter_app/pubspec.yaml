@@ -51,6 +51,7 @@ dependencies:
   
   # 本地存储
   shared_preferences: ^2.3.0
+  
 
 dev_dependencies:
   flutter_test:
@@ -63,10 +64,11 @@ flutter:
   assets:
     - assets/images/
     - assets/lottie/
-    
+
   fonts:
     - family: NotoSansSC
       fonts:
         - asset: assets/fonts/NotoSansSC-Regular.otf
         - asset: assets/fonts/NotoSansSC-Bold.otf
           weight: 700
+
