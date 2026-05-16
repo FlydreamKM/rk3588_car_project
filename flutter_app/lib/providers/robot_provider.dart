@@ -211,3 +211,4 @@ class RobotProvider extends ChangeNotifier {
     _telemetrySub?.cancel();
     super.dispose();
   }
+}

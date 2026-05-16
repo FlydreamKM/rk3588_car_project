@@ -72,7 +72,6 @@ class _JoystickControlState extends State<JoystickControl> {
               outerCircleColor: Colors.cyanAccent.withOpacity(0.3),
               innerCircleColor: Colors.cyanAccent.withOpacity(0.1),
               drawArrows: true,
-              arrowColor: Colors.cyanAccent.withOpacity(0.5),
             ),
             arrowsDecoration: JoystickArrowsDecoration(
               color: Colors.cyanAccent.withOpacity(0.5),

@@ -174,7 +174,7 @@ class MainScreen extends StatelessWidget {
 
             // === 电机状态 ===
             _buildSection(
-              icon: Icons.electric_motor,
+              icon: Icons.settings,
               title: '电机状态',
               child: _buildMotorStatus(context),
             ),
@@ -407,7 +407,7 @@ class MainScreen extends StatelessWidget {
       {'name': '开心', 'value': 'happy', 'icon': Icons.sentiment_very_satisfied},
       {'name': '困', 'value': 'sleepy', 'icon': Icons.bedtime},
       {'name': '惊讶', 'value': 'surprised', 'icon': Icons.sentiment_very_dissatisfied},
-      {'name': '酷', 'value': 'cool', 'icon': Icons.sentiment_cool},
+      {'name': '酷', 'value': 'cool', 'icon': Icons.sentiment_satisfied},
       {'name': '爱心', 'value': 'love', 'icon': Icons.favorite},
     ];
     return Wrap(
