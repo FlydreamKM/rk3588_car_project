@@ -14,10 +14,10 @@ class VideoStreamWidget extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.cyanAccent.withOpacity(0.5), width: 2),
+        border: Border.all(color: Colors.cyanAccent.withValues(alpha:0.5), width: 2),
         boxShadow: [
           BoxShadow(
-            color: Colors.cyanAccent.withOpacity(0.2),
+            color: Colors.cyanAccent.withValues(alpha:0.2),
             blurRadius: 20,
             spreadRadius: 2,
           ),
@@ -36,7 +36,6 @@ class VideoStreamWidget extends StatelessWidget {
                 showLiveIcon: true,
                 watermarkText: "AI VISION FEED",
                 showWatermark: true,
-                enableLogging: false,
               ),
               // Live indicator overlay (if package doesn't provide)
               Positioned(
@@ -45,7 +44,7 @@ class VideoStreamWidget extends StatelessWidget {
                 child: Container(
                   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.8),
+                    color: Colors.red.withValues(alpha:0.8),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Row(
@@ -79,7 +78,7 @@ class VideoStreamWidget extends StatelessWidget {
                 child: Text(
                   'AI VISION FEED',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
+                    color: Colors.white.withValues(alpha:0.6),
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 2,

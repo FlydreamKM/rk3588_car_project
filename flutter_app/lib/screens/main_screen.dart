@@ -41,8 +41,8 @@ class MainScreen extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: provider.connected
-                  ? Colors.green.withOpacity(0.2)
-                  : Colors.red.withOpacity(0.2),
+                  ? Colors.green.withValues(alpha:0.2)
+                  : Colors.red.withValues(alpha:0.2),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: provider.connected ? Colors.green : Colors.red,
@@ -141,7 +141,7 @@ class MainScreen extends StatelessWidget {
 
             // === 电机状态 ===
             _buildSection(
-              icon: Icons.electric_motor,
+              icon: Icons.electrical_services,
               title: '电机状态',
               child: _buildMotorStatus(context),
             ),
@@ -160,8 +160,8 @@ class MainScreen extends StatelessWidget {
     return GlassContainer(
       gradient: LinearGradient(
         colors: [
-          Colors.white.withOpacity(0.1),
-          Colors.white.withOpacity(0.05),
+          Colors.white.withValues(alpha:0.1),
+          Colors.white.withValues(alpha:0.05),
         ],
       ),
       blur: 20,
@@ -245,10 +245,10 @@ class MainScreen extends StatelessWidget {
         padding: EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [color.withOpacity(0.3), color.withOpacity(0.1)],
+            colors: [color.withValues(alpha:0.3), color.withValues(alpha:0.1)],
           ),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withOpacity(0.5)),
+          border: Border.all(color: color.withValues(alpha:0.5)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -278,7 +278,7 @@ class MainScreen extends StatelessWidget {
       children: [
         _buildMotorRow('电机1', motor1),
         SizedBox(height: 8),
-        Divider(color: Colors.white.withOpacity(0.1)),
+        Divider(color: Colors.white.withValues(alpha:0.1)),
         SizedBox(height: 8),
         _buildMotorRow('电机2', motor2),
       ],
@@ -352,7 +352,7 @@ class MainScreen extends StatelessWidget {
                 labelText: 'RK3588S IP 地址',
                 labelStyle: TextStyle(color: Colors.grey),
                 enabledBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.cyanAccent.withOpacity(0.3)),
+                  borderSide: BorderSide(color: Colors.cyanAccent.withValues(alpha:0.3)),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderSide: BorderSide(color: Colors.cyanAccent),

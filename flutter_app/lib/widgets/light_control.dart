@@ -31,12 +31,12 @@ class LightControl extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.2),
+                  color: color.withValues(alpha:0.2),
                   shape: BoxShape.circle,
                   border: Border.all(color: color, width: 2),
                   boxShadow: [
                     BoxShadow(
-                      color: color.withOpacity(0.4),
+                      color: color.withValues(alpha:0.4),
                       blurRadius: 10,
                       spreadRadius: 1,
                     ),

@@ -32,18 +32,18 @@ class ModeButtons extends StatelessWidget {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: isActive
-                    ? [color.withOpacity(0.6), color.withOpacity(0.3)]
-                    : [color.withOpacity(0.15), color.withOpacity(0.05)],
+                    ? [color.withValues(alpha:0.6), color.withValues(alpha:0.3)]
+                    : [color.withValues(alpha:0.15), color.withValues(alpha:0.05)],
               ),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isActive ? color : color.withOpacity(0.2),
+                color: isActive ? color : color.withValues(alpha:0.2),
                 width: isActive ? 2 : 1,
               ),
               boxShadow: isActive
                   ? [
                       BoxShadow(
-                        color: color.withOpacity(0.4),
+                        color: color.withValues(alpha:0.4),
                         blurRadius: 12,
                         spreadRadius: 1,
                       ),
@@ -55,14 +55,14 @@ class ModeButtons extends StatelessWidget {
               children: [
                 Icon(
                   mode['icon'] as IconData,
-                  color: isActive ? Colors.white : color.withOpacity(0.7),
+                  color: isActive ? Colors.white : color.withValues(alpha:0.7),
                   size: 18,
                 ),
                 SizedBox(width: 6),
                 Text(
                   mode['name'] as String,
                   style: TextStyle(
-                    color: isActive ? Colors.white : color.withOpacity(0.7),
+                    color: isActive ? Colors.white : color.withValues(alpha:0.7),
                     fontSize: 13,
                     fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
                   ),

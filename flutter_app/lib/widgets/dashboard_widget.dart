@@ -39,7 +39,7 @@ class DashboardWidget extends StatelessWidget {
           radiusFactor: 0.9,
           axisLineStyle: AxisLineStyle(
             thickness: 0.1,
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha:0.1),
           ),
           ranges: <GaugeRange>[
             GaugeRange(
@@ -109,15 +109,15 @@ class DashboardWidget extends StatelessWidget {
           majorTickStyle: MajorTickStyle(
             length: 8,
             thickness: 1,
-            color: Colors.white.withOpacity(0.5),
+            color: Colors.white.withValues(alpha:0.5),
           ),
           minorTickStyle: MinorTickStyle(
             length: 4,
             thickness: 1,
-            color: Colors.white.withOpacity(0.3),
+            color: Colors.white.withValues(alpha:0.3),
           ),
           axisLabelStyle: GaugeTextStyle(
-            color: Colors.white.withOpacity(0.7),
+            color: Colors.white.withValues(alpha:0.7),
             fontSize: 10,
           ),
         ),
@@ -142,7 +142,7 @@ class DashboardWidget extends StatelessWidget {
             radiusFactor: 0.9,
             axisLineStyle: AxisLineStyle(
               thickness: 0.15,
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white.withValues(alpha:0.1),
             ),
             pointers: <GaugePointer>[
               RangePointer(
@@ -194,7 +194,7 @@ class DashboardWidget extends StatelessWidget {
           radiusFactor: 0.9,
           axisLineStyle: AxisLineStyle(
             thickness: 0.05,
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha:0.1),
           ),
           pointers: <GaugePointer>[
             MarkerPointer(
@@ -236,15 +236,15 @@ class DashboardWidget extends StatelessWidget {
           majorTickStyle: MajorTickStyle(
             length: 6,
             thickness: 1,
-            color: Colors.white.withOpacity(0.4),
+            color: Colors.white.withValues(alpha:0.4),
           ),
           minorTickStyle: MinorTickStyle(
             length: 3,
             thickness: 1,
-            color: Colors.white.withOpacity(0.2),
+            color: Colors.white.withValues(alpha:0.2),
           ),
           axisLabelStyle: GaugeTextStyle(
-            color: Colors.white.withOpacity(0.6),
+            color: Colors.white.withValues(alpha:0.6),
             fontSize: 9,
           ),
         ),
