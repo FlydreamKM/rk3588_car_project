@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_joystick/flutter_joystick.dart';
 import 'package:provider/provider.dart';
@@ -12,7 +11,9 @@ class JoystickControl extends StatefulWidget {
 }
 
 class _JoystickControlState extends State<JoystickControl> {
+  // ignore: unused_field
   double _x = 0;
+  // ignore: unused_field
   double _y = 0;
   String _currentAction = 'stop';
 
@@ -72,6 +73,9 @@ class _JoystickControlState extends State<JoystickControl> {
               innerCircleColor: Colors.cyanAccent.withOpacity(0.1),
               drawArrows: true,
               arrowColor: Colors.cyanAccent.withOpacity(0.5),
+            ),
+            arrowsDecoration: JoystickArrowsDecoration(
+              color: Colors.cyanAccent.withOpacity(0.5),
             ),
           ),
           stick: JoystickStick(

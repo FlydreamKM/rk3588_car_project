@@ -36,7 +36,7 @@ class VideoStreamWidget extends StatelessWidget {
                 showLiveIcon: true,
                 watermarkText: "AI VISION FEED",
                 showWatermark: true,
-                enableLogging: false,
+                // enableLogging removed - not supported in this mjpeg_stream version
               ),
               // Live indicator overlay (if package doesn't provide)
               Positioned(
