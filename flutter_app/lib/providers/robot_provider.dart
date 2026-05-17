@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 
 class RobotProvider extends ChangeNotifier {
@@ -22,6 +23,8 @@ class RobotProvider extends ChangeNotifier {
   String _serverIp = '192.168.1.100';
   StreamSubscription? _telemetrySub;
   
+  static const String _prefServerIp = 'last_server_ip';
+  
   Map<String, dynamic> get state => _state;
   bool get connected => _connected;
   String get serverIp => _serverIp;
@@ -32,10 +35,38 @@ class RobotProvider extends ChangeNotifier {
   String get mode => _state['mode'] as String? ?? 'manual';
   String get status => _state['status'] as String? ?? 'idle';
   
+  RobotProvider() {
+    _loadSavedIp();
+  }
+  
+  Future<void> _loadSavedIp() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedIp = prefs.getString(_prefServerIp);
+      if (savedIp != null && savedIp.isNotEmpty) {
+        _serverIp = savedIp;
+        ApiService.setServerIp(_serverIp);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Load saved IP error: $e');
+    }
+  }
+  
   void setServerIp(String ip) {
     _serverIp = ip;
     ApiService.setServerIp(ip);
+    _saveServerIp(ip);
     notifyListeners();
+  }
+  
+  Future<void> _saveServerIp(String ip) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefServerIp, ip);
+    } catch (e) {
+      debugPrint('Save server IP error: $e');
+    }
   }
   
   Future<void> connect() async {

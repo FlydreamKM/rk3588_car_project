@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:glassmorphism_ui/glassmorphism_ui.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/robot_provider.dart';
 import '../services/api_service.dart';
 import '../services/ssh_service.dart';
@@ -15,16 +16,76 @@ class ConnectionScreen extends StatefulWidget {
 }
 
 class _ConnectionScreenState extends State<ConnectionScreen> {
-  final _ipController = TextEditingController(text: '192.168.1.100');
-  final _sshUserController = TextEditingController(text: 'root');
-  final _sshPassController = TextEditingController(text: '');
-  final _sshPortController = TextEditingController(text: '22');
+  final _ipController = TextEditingController();
+  final _sshUserController = TextEditingController();
+  final _sshPassController = TextEditingController();
+  final _sshPortController = TextEditingController();
 
   bool _isConnecting = false;
   bool _isHttpConnected = false;
   bool _isSshConnected = false;
   bool _serverStarted = false;
   String _statusMessage = '请输入 RK3588S 连接信息';
+
+  // SharedPreferences keys
+  static const String _prefIp = 'last_server_ip';
+  static const String _prefSshHost = 'ssh_host';
+  static const String _prefSshPort = 'ssh_port';
+  static const String _prefSshUser = 'ssh_username';
+  static const String _prefSshPass = 'ssh_password';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedConnectionData();
+  }
+
+  Future<void> _loadSavedConnectionData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        // API IP (fallback to 192.168.1.100)
+        _ipController.text = prefs.getString(_prefIp) ?? '192.168.1.100';
+        
+        // SSH data (fallbacks for convenience)
+        _sshUserController.text = prefs.getString(_prefSshUser) ?? 'orangepi';
+        _sshPassController.text = prefs.getString(_prefSshPass) ?? '';
+        _sshPortController.text = prefs.getString(_prefSshPort) ?? '22';
+        
+        // If no SSH host saved, default to same as API IP
+        final savedSshHost = prefs.getString(_prefSshHost);
+        if (savedSshHost != null && savedSshHost.isNotEmpty) {
+          // User explicitly saved a different SSH host
+          // Keep it separate, but display won't have separate field for now
+          // We use the IP field for both unless user edits
+        }
+      });
+    } catch (e) {
+      debugPrint('Load saved connection data error: $e');
+      // Defaults already set in controller constructors via text parameter
+      _ipController.text = '192.168.1.100';
+      _sshUserController.text = 'orangepi';
+      _sshPortController.text = '22';
+    }
+  }
+
+  Future<void> _saveConnectionData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ip = _ipController.text.trim();
+      final user = _sshUserController.text.trim();
+      final pass = _sshPassController.text;
+      final port = _sshPortController.text.trim();
+
+      await prefs.setString(_prefIp, ip);
+      await prefs.setString(_prefSshHost, ip); // SSH host same as API IP
+      await prefs.setString(_prefSshUser, user);
+      await prefs.setString(_prefSshPass, pass);
+      await prefs.setString(_prefSshPort, port);
+    } catch (e) {
+      debugPrint('Save connection data error: $e');
+    }
+  }
 
   Future<void> _testHttpConnection() async {
     setState(() {
@@ -41,6 +102,8 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
         _isHttpConnected = true;
         _statusMessage = 'HTTP API 连接成功 ✅';
       });
+      // Save IP on successful connection
+      await _saveConnectionData();
     } catch (e) {
       setState(() {
         _isHttpConnected = false;
@@ -76,6 +139,10 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
           : 'SSH 连接失败 ❌\n请检查用户名/密码/端口';
       _isConnecting = false;
     });
+
+    if (success) {
+      await _saveConnectionData();
+    }
   }
 
   Future<void> _startServer() async {
@@ -102,6 +169,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     });
 
     if (apiSuccess) {
+      await _saveConnectionData();
       await Future.delayed(Duration(seconds: 2));
       await _testHttpConnection();
     }
@@ -111,6 +179,8 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     final provider = context.read<RobotProvider>();
     provider.setServerIp(_ipController.text.trim());
     provider.connect();
+    // Save current data before entering
+    _saveConnectionData();
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => MainScreen()),

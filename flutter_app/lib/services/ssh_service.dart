@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SshService {
   static SSHClient? _client;
@@ -14,11 +15,56 @@ class SshService {
   static String _username = '';
   static String _password = '';
 
+  // SharedPreferences keys
+  static const String _prefSshHost = 'ssh_host';
+  static const String _prefSshPort = 'ssh_port';
+  static const String _prefSshUser = 'ssh_username';
+  static const String _prefSshPass = 'ssh_password';
+
   static String get host => _host;
   static int get port => _port;
   static String get username => _username;
 
   static Stream<String>? get terminalOutput => _terminalOutput?.stream;
+
+  /// Load last saved SSH credentials from SharedPreferences
+  static Future<Map<String, dynamic>> loadSavedCredentials() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return {
+        'host': prefs.getString(_prefSshHost) ?? '',
+        'port': int.tryParse(prefs.getString(_prefSshPort) ?? '') ?? 22,
+        'username': prefs.getString(_prefSshUser) ?? '',
+        'password': prefs.getString(_prefSshPass) ?? '',
+      };
+    } catch (e) {
+      print('SSH load credentials error: $e');
+      return {
+        'host': '',
+        'port': 22,
+        'username': '',
+        'password': '',
+      };
+    }
+  }
+
+  /// Save SSH credentials to SharedPreferences
+  static Future<void> saveCredentials({
+    required String host,
+    int port = 22,
+    required String username,
+    required String password,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefSshHost, host);
+      await prefs.setString(_prefSshPort, port.toString());
+      await prefs.setString(_prefSshUser, username);
+      await prefs.setString(_prefSshPass, password);
+    } catch (e) {
+      print('SSH save credentials error: $e');
+    }
+  }
 
   static Future<bool> connect({
     required String host,
@@ -41,6 +87,14 @@ class SshService {
 
       // Verify connection
       await _client!.authenticated;
+      
+      // Save successful connection data
+      await saveCredentials(
+        host: host,
+        port: port,
+        username: username,
+        password: password,
+      );
       
       _terminalOutput = StreamController<String>.broadcast();
       return true;
