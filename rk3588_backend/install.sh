@@ -294,8 +294,18 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 info "Upgrading pip, setuptools, wheel..."
 pip install -q --upgrade pip setuptools wheel
 
+# pygame often lacks aarch64 wheels for new Python versions.
+# Try binary first; if none exists, force build with --no-binary after.
+info "Installing pygame (with binary wheel preference)..."
+pip install --prefer-binary pygame || {
+    warn "No binary wheel for pygame. Attempting source build..."
+    # Ensure build deps are available
+    apt-get install -y -qq libfreetype6-dev libjpeg-dev libpng-dev || true
+    pip install --no-binary pygame pygame
+}
+
 if [ -f "$REQUIREMENTS" ]; then
-    info "Installing from ${REQUIREMENTS}..."
+    info "Installing remaining packages from ${REQUIREMENTS}..."
     # --prefer-binary: avoid compiling from source when wheels exist
     # This is critical on aarch64 where compiling numpy/opencv can take hours
     pip install --prefer-binary -r "$REQUIREMENTS"
