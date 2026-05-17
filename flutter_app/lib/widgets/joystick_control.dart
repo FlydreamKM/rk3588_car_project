@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../providers/robot_provider.dart';
 
 class JoystickControl extends StatefulWidget {
-  const JoystickControl({Key? key}) : super(key: key);
+  final double size;
+
+  const JoystickControl({Key? key, this.size = 140}) : super(key: key);
 
   @override
   State<JoystickControl> createState() => _JoystickControlState();
@@ -44,7 +46,11 @@ class _JoystickControlState extends State<JoystickControl> {
 
   @override
   Widget build(BuildContext context) {
+    final baseSize = widget.size;
+    final stickSize = baseSize * 0.36;
+
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Joystick(
           mode: JoystickMode.all,
@@ -64,7 +70,7 @@ class _JoystickControlState extends State<JoystickControl> {
             context.read<RobotProvider>().sendControl('stop');
           },
           base: JoystickBase(
-            size: 140,
+            size: baseSize,
             decoration: JoystickBaseDecoration(
               color: Colors.grey.shade900,
               drawOuterCircle: true,
@@ -78,19 +84,19 @@ class _JoystickControlState extends State<JoystickControl> {
             ),
           ),
           stick: JoystickStick(
-            size: 50,
+            size: stickSize,
             decoration: JoystickStickDecoration(
               color: Colors.cyanAccent,
               shadowColor: Colors.cyanAccent.withOpacity(0.5),
             ),
           ),
         ),
-        SizedBox(height: 12),
+        SizedBox(height: 8),
         Text(
           _currentAction.toUpperCase(),
           style: TextStyle(
             color: Colors.cyanAccent,
-            fontSize: 14,
+            fontSize: 12,
             fontWeight: FontWeight.bold,
             letterSpacing: 2,
           ),
