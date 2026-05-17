@@ -94,7 +94,8 @@ SYSTEM_PACKAGES=(
     "libsdl2-gfx-1.0-0"
     
     # OpenCV dependencies (headless but needs some libs)
-    "libgl1-mesa-glx"
+    "libgl1"
+    "libglx-mesa0"
     "libglib2.0-0"
     "libsm6"
     "libxext6"
