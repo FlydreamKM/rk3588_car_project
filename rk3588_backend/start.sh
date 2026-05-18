@@ -41,9 +41,10 @@ echo "Installing dependencies..."
 pip install --prefer-binary --upgrade -r requirements.txt
 
 # Set ports from environment or use defaults
-export MOTOR_PORT=${MOTOR_PORT:-/dev/ttyUSB0}
-export IMU_PORT=${IMU_PORT:-/dev/ttyUSB1}
-export TRACKING_PORT=${TRACKING_PORT:-/dev/ttyUSB2}
+# Wiring: IMU=ttyUSB0, Motor=ttyACM0, Tracking=ttyUSB1
+export MOTOR_PORT=${MOTOR_PORT:-/dev/ttyACM0}
+export IMU_PORT=${IMU_PORT:-/dev/ttyUSB0}
+export TRACKING_PORT=${TRACKING_PORT:-/dev/ttyUSB1}
 export SERVO_PWM_CHIP=${SERVO_PWM_CHIP:-4}   # OrangePi 5 default pwmchip4
 
 echo ""
