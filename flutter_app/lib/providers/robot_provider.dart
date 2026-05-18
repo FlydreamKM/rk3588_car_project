@@ -108,9 +108,9 @@ class RobotProvider extends ChangeNotifier {
     }
   }
   
-  Future<void> setCameraResolution(int width, int height) async {
+  Future<void> setCameraResolution(int width, int height, {int? fps}) async {
     try {
-      final result = await ApiService.setCameraResolution(width, height);
+      final result = await ApiService.setCameraResolution(width, height, fps: fps);
       if (result['success'] == true) {
         _cameraWidth = result['width'] ?? width;
         _cameraHeight = result['height'] ?? height;

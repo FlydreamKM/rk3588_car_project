@@ -207,11 +207,11 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
-  static Future<Map<String, dynamic>> setCameraResolution(int width, int height) async {
+  static Future<Map<String, dynamic>> setCameraResolution(int width, int height, {int? fps}) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/camera/resolution'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'width': width, 'height': height}),
+      body: jsonEncode({'width': width, 'height': height, if (fps != null) 'fps': fps}),
     );
     return jsonDecode(response.body);
   }

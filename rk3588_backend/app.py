@@ -160,39 +160,66 @@ def find_camera():
 camera = find_camera()
 
 def get_camera_presets():
-    """Test preset resolutions and return available ones"""
+    """Test preset MJPEG resolutions and return available ones with FPS"""
     if not camera.isOpened():
         return []
-    presets = [(320,240), (640,480), (800,600), (1280,720), (1920,1080)]
+    # Target presets: (width, height, target_fps)
+    target_presets = [
+        (640, 480, 400),
+        (640, 512, 400),
+        (960, 540, 200),
+        (1280, 720, 200),
+        (1280, 1024, 200),
+    ]
     available = []
     # Save current
     orig_w = int(camera.get(cv2.CAP_PROP_FRAME_WIDTH))
     orig_h = int(camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    for w, h in presets:
+    orig_fps = int(camera.get(cv2.CAP_PROP_FPS))
+    # Force MJPEG format for high-FPS support
+    camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+    for w, h, fps in target_presets:
         camera.set(cv2.CAP_PROP_FRAME_WIDTH, w)
         camera.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
-        time.sleep(0.05)
+        camera.set(cv2.CAP_PROP_FPS, fps)
+        time.sleep(0.1)
         actual_w = int(camera.get(cv2.CAP_PROP_FRAME_WIDTH))
         actual_h = int(camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        if actual_w >= w - 20 and actual_h >= h - 20:
-            available.append({"width": actual_w, "height": actual_h})
-    # Restore
+        actual_fps = int(camera.get(cv2.CAP_PROP_FPS))
+        # Accept if close to requested resolution
+        if abs(actual_w - w) <= 20 and abs(actual_h - h) <= 20:
+            available.append({"width": actual_w, "height": actual_h, "fps": actual_fps})
+            print(f"[Camera Preset] OK: {actual_w}x{actual_h}@{actual_fps}fps")
+        else:
+            print(f"[Camera Preset] Skip: requested {w}x{h}@{fps}fps, got {actual_w}x{actual_h}@{actual_fps}fps")
+    # Restore original
     camera.set(cv2.CAP_PROP_FRAME_WIDTH, orig_w)
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, orig_h)
+    camera.set(cv2.CAP_PROP_FPS, orig_fps)
     return available
 
-def set_camera_resolution(w, h):
+def set_camera_resolution(w, h, fps=None):
     if not camera.isOpened():
         return False, "Camera not available"
+    # Try MJPEG first for high-FPS cameras
+    camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
     camera.set(cv2.CAP_PROP_FRAME_WIDTH, w)
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
-    time.sleep(0.1)
+    if fps:
+        camera.set(cv2.CAP_PROP_FPS, fps)
+    time.sleep(0.15)
     actual_w = int(camera.get(cv2.CAP_PROP_FRAME_WIDTH))
     actual_h = int(camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    return True, {"width": actual_w, "height": actual_h}
+    actual_fps = int(camera.get(cv2.CAP_PROP_FPS))
+    if actual_w <= 0 or actual_h <= 0:
+        return False, f"Camera rejected {w}x{h}"
+    robot_state["camera"]["width"] = actual_w
+    robot_state["camera"]["height"] = actual_h
+    robot_state["camera"]["target_fps"] = actual_fps
+    return True, {"width": actual_w, "height": actual_h, "fps": actual_fps}
 
 def generate_frames():
-    """Generate MJPEG frames"""
+    """Generate MJPEG frames at camera native rate"""
     global _camera_fps, _camera_frame_count, _camera_fps_time
     while True:
         success, frame = camera.read()
@@ -205,10 +232,8 @@ def generate_frames():
             robot_state["camera"]["fps"] = round(_camera_fps, 1)
         
         if not success:
-            # Generate a placeholder frame if camera fails
             frame = create_placeholder_frame()
         else:
-            # Add overlays
             frame = draw_overlays(frame)
             
         ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
@@ -216,7 +241,7 @@ def generate_frames():
             frame_bytes = buffer.tobytes()
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-        time.sleep(0.033)  # ~30fps
+        # Do NOT sleep here — let camera native rate drive throughput
 
 def create_placeholder_frame():
     """Create a placeholder frame when camera is unavailable"""
@@ -299,15 +324,17 @@ def camera_info():
 
 @app.route('/api/camera/resolution', methods=['POST'])
 def camera_resolution():
-    """Set camera resolution"""
+    """Set camera resolution and optional FPS"""
     data = request.json or {}
     w = data.get('width', 640)
     h = data.get('height', 480)
-    ok, result = set_camera_resolution(w, h)
+    fps = data.get('fps')
+    ok, result = set_camera_resolution(w, h, fps)
     if ok:
         robot_state["camera"]["width"] = result["width"]
         robot_state["camera"]["height"] = result["height"]
-        return jsonify({"success": True, "width": result["width"], "height": result["height"]})
+        robot_state["camera"]["target_fps"] = result.get("fps", 0)
+        return jsonify({"success": True, "width": result["width"], "height": result["height"], "fps": result.get("fps", 0)})
     return jsonify({"success": False, "error": result}), 503
 
 @app.route('/api/status', methods=['GET'])

@@ -245,11 +245,12 @@ class ResolutionPicker extends StatelessWidget {
               ...presets.map((p) {
                 final w = p['width'] as int;
                 final h = p['height'] as int;
+                final fps = p['fps'] as int? ?? 0;
                 final isCurrent = w == provider.cameraWidth && h == provider.cameraHeight;
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(
-                    '$w × $h',
+                    '$w × $h ${fps > 0 ? "@${fps}FPS" : ""}',
                     style: TextStyle(
                       color: isCurrent ? Colors.cyanAccent : Colors.white,
                       fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
@@ -257,7 +258,7 @@ class ResolutionPicker extends StatelessWidget {
                   ),
                   trailing: isCurrent ? Icon(Icons.check, color: Colors.cyanAccent, size: 18) : null,
                   onTap: () {
-                    provider.setCameraResolution(w, h);
+                    provider.setCameraResolution(w, h, fps: fps > 0 ? fps : null);
                     Navigator.pop(context);
                   },
                 );
