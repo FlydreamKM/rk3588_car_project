@@ -32,14 +32,20 @@ class YbImuDriver:
         self._connected = False
 
     def _find_port(self) -> Optional[str]:
-        """Auto-detect IMU serial port"""
+        """Auto-detect IMU serial port, skipping motor port if known"""
+        motor_port = os.environ.get('MOTOR_PORT', '/dev/ttyUSB0')
         candidates = [
-            "/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/ttyUSB2",
-            "/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyTHS1"
+            "/dev/ttyUSB1", "/dev/ttyUSB2", "/dev/ttyUSB3",
+            "/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyTHS1",
+            "/dev/ttyUSB0",  # last resort
         ]
         for p in candidates:
-            if os.path.exists(p):
+            if os.path.exists(p) and p != motor_port:
                 return p
+        # If only motor port exists, warn but return it anyway
+        if os.path.exists(motor_port):
+            print(f"[IMU] WARNING: Only {motor_port} available, may conflict with motor driver!")
+            return motor_port
         return None
 
     def connect(self) -> bool:

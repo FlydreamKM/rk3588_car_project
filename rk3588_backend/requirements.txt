@@ -5,3 +5,5 @@ opencv-python-headless==4.11.0.86
 numpy==2.2.6
 pygame>=2.6.1
 paramiko==3.4.0
+# Optional: for gpiod PWM fallback on OrangePi 5
+# python-periphery>=2.4.0

@@ -29,15 +29,18 @@ motor_driver = MotorDriver(port=MOTOR_PORT)
 motor_connected = False
 
 # ===================== Servo Driver =====================
-servo_driver = ServoDriver()
+# OrangePi 5: try pwmchip4 first, fallback to 0
+SERVO_PWM_CHIP = int(os.environ.get('SERVO_PWM_CHIP', '4'))
+servo_driver = ServoDriver(chip=SERVO_PWM_CHIP)
 servo_connected = servo_driver.init()
 
 # ===================== IMU Driver =====================
-imu_driver = YbImuDriver()
+IMU_PORT = os.environ.get('IMU_PORT', '/dev/ttyUSB1')
+imu_driver = YbImuDriver(port=IMU_PORT)
 imu_connected = imu_driver.connect()
 
 # ===================== Tracking Driver =====================
-TRACKING_PORT = os.environ.get('TRACKING_PORT', '/dev/ttyUSB1')
+TRACKING_PORT = os.environ.get('TRACKING_PORT', '/dev/ttyUSB2')
 tracking_driver = TrackingDriver(port=TRACKING_PORT)
 tracking_connected = tracking_driver.connect()
 
@@ -587,12 +590,12 @@ if __name__ == '__main__':
     print("=" * 50)
     print("RK3588S Smart Car Backend")
     print("=" * 50)
-    print(f"Motor:   {'Connected' if motor_connected else 'SIMULATION MODE'}")
-    print(f"Servo:   {'Connected' if servo_connected else 'NOT AVAILABLE'}")
-    print(f"IMU:     {'Connected' if imu_connected else 'NOT AVAILABLE'}")
-    print(f"Tracking:{'Connected' if tracking_connected else 'NOT AVAILABLE'}")
-    print(f"Display: {'Connected' if display_connected else 'NOT AVAILABLE'}")
-    print(f"Camera:  {'OK' if camera.isOpened() else 'NOT AVAILABLE'}")
+    print(f"Motor:    {'Connected' if motor_connected else 'SIMULATION MODE'} ({MOTOR_PORT})")
+    print(f"Servo:    {'Connected' if servo_connected else 'NOT AVAILABLE'} (pwmchip{SERVO_PWM_CHIP})")
+    print(f"IMU:      {'Connected' if imu_connected else 'NOT AVAILABLE'} ({IMU_PORT})")
+    print(f"Tracking: {'Connected' if tracking_connected else 'NOT AVAILABLE'} ({TRACKING_PORT})")
+    print(f"Display:  {'Connected' if display_connected else 'NOT AVAILABLE'}")
+    print(f"Camera:   {'OK' if camera.isOpened() else 'NOT AVAILABLE'}")
     print("API Endpoints:")
     print("  GET  /video_feed           - MJPEG video stream")
     print("  GET  /api/status           - Robot status")
