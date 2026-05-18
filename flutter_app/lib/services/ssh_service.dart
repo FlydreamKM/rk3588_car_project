@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -10,32 +11,46 @@ class SshService {
   static SSHClient? _client;
   static SSHSession? _session;
   static StreamController<String>? _terminalOutput;
+  static final ListQueue<String> _outputHistory = ListQueue<String>(2000);
   static String _host = '';
   static int _port = 22;
   static String _username = '';
   static String _password = '';
+
+  // Developer mode
+  static bool _developerMode = false;
+  static String _customStartCommand = '';
 
   // SharedPreferences keys
   static const String _prefSshHost = 'ssh_host';
   static const String _prefSshPort = 'ssh_port';
   static const String _prefSshUser = 'ssh_username';
   static const String _prefSshPass = 'ssh_password';
+  static const String _prefDevMode = 'developer_mode';
+  static const String _prefCustomCmd = 'custom_start_command';
 
   static String get host => _host;
   static int get port => _port;
   static String get username => _username;
+  static bool get developerMode => _developerMode;
+  static String get customStartCommand => _customStartCommand;
+  static List<String> get outputHistory => List<String>.from(_outputHistory);
 
   static Stream<String>? get terminalOutput => _terminalOutput?.stream;
 
-  /// Load last saved SSH credentials from SharedPreferences
+  /// Load last saved SSH credentials and settings from SharedPreferences
   static Future<Map<String, dynamic>> loadSavedCredentials() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      _developerMode = prefs.getBool(_prefDevMode) ?? false;
+      _customStartCommand = prefs.getString(_prefCustomCmd) ?? '';
       return {
         'host': prefs.getString(_prefSshHost) ?? '',
         'port': int.tryParse(prefs.getString(_prefSshPort) ?? '') ?? 22,
         'username': prefs.getString(_prefSshUser) ?? '',
         'password': prefs.getString(_prefSshPass) ?? '',
+        'developerMode': _developerMode,
+        'customStartCommand': _customStartCommand,
       };
     } catch (e) {
       print('SSH load credentials error: $e');
@@ -44,6 +59,8 @@ class SshService {
         'port': 22,
         'username': '',
         'password': '',
+        'developerMode': false,
+        'customStartCommand': '',
       };
     }
   }
@@ -63,6 +80,28 @@ class SshService {
       await prefs.setString(_prefSshPass, password);
     } catch (e) {
       print('SSH save credentials error: $e');
+    }
+  }
+
+  /// Save developer mode setting
+  static Future<void> setDeveloperMode(bool enabled) async {
+    _developerMode = enabled;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefDevMode, enabled);
+    } catch (e) {
+      print('Save dev mode error: $e');
+    }
+  }
+
+  /// Save custom start command
+  static Future<void> setCustomStartCommand(String command) async {
+    _customStartCommand = command.trim();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefCustomCmd, _customStartCommand);
+    } catch (e) {
+      print('Save custom command error: $e');
     }
   }
 
@@ -87,7 +126,7 @@ class SshService {
 
       // Verify connection
       await _client!.authenticated;
-      
+
       // Save successful connection data
       await saveCredentials(
         host: host,
@@ -95,7 +134,7 @@ class SshService {
         username: username,
         password: password,
       );
-      
+
       _terminalOutput = StreamController<String>.broadcast();
       return true;
     } catch (e) {
@@ -108,9 +147,10 @@ class SshService {
   static Future<bool> startRemoteServer() async {
     if (_client == null) return false;
     try {
-      final result = await _client!.run(
-        'cd ~/rk3588_car_project/rk3588_backend && nohup bash start.sh > /tmp/car_backend.log 2>&1 &'
-      );
+      final command = _customStartCommand.isNotEmpty && _developerMode
+          ? _customStartCommand
+          : 'cd ~/rk3588_car_project/rk3588_backend && nohup bash start.sh > /tmp/car_backend.log 2>&1 &';
+      final result = await _client!.run(command);
       return true;
     } catch (e) {
       print('SSH start server error: $e');
@@ -147,11 +187,12 @@ class SshService {
     if (_client == null) return false;
     try {
       _session = await _client!.execute('bash');
-      
+
       _session!.stdout
           .cast<List<int>>()
           .transform(utf8.decoder)
           .listen((data) {
+        _addToHistory(data);
         _terminalOutput?.add(data);
       });
 
@@ -159,13 +200,28 @@ class SshService {
           .cast<List<int>>()
           .transform(utf8.decoder)
           .listen((data) {
-        _terminalOutput?.add('[stderr] $data');
+        final line = '[stderr] $data';
+        _addToHistory(line);
+        _terminalOutput?.add(line);
       });
 
       return true;
     } catch (e) {
       print('SSH terminal error: $e');
       return false;
+    }
+  }
+
+  static void _addToHistory(String data) {
+    // Split by newlines and add each line
+    final lines = data.split('\n');
+    for (final line in lines) {
+      if (line.isNotEmpty) {
+        _outputHistory.add(line);
+        if (_outputHistory.length > 2000) {
+          _outputHistory.removeFirst();
+        }
+      }
     }
   }
 
@@ -182,6 +238,7 @@ class SshService {
     _client = null;
     _terminalOutput?.close();
     _terminalOutput = null;
+    _outputHistory.clear();
   }
 
   static bool get isConnected => _client != null;

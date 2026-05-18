@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:glassmorphism_ui/glassmorphism_ui.dart';
 import 'package:provider/provider.dart';
 import '../providers/robot_provider.dart';
-import '../screens/connection_screen.dart';
 import '../widgets/video_stream_widget.dart';
 import '../widgets/joystick_control.dart';
 
@@ -143,9 +142,7 @@ class _MainScreenState extends State<MainScreen> {
               IconButton(
                 icon: Icon(Icons.arrow_back, color: Colors.white, size: 20),
                 onPressed: () {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => ConnectionScreen()),
-                  );
+                  Navigator.of(context).pop();
                 },
                 padding: EdgeInsets.zero,
                 constraints: BoxConstraints(),

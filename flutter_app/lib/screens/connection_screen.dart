@@ -7,6 +7,7 @@ import '../providers/robot_provider.dart';
 import '../services/api_service.dart';
 import '../services/ssh_service.dart';
 import 'main_screen.dart';
+import 'settings_screen.dart';
 
 class ConnectionScreen extends StatefulWidget {
   const ConnectionScreen({Key? key}) : super(key: key);
@@ -26,6 +27,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   bool _isSshConnected = false;
   bool _serverStarted = false;
   String _statusMessage = '请输入 RK3588S 连接信息';
+  bool _developerMode = false;
 
   // SharedPreferences keys
   static const String _prefIp = 'last_server_ip';
@@ -38,6 +40,20 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   void initState() {
     super.initState();
     _loadSavedConnectionData();
+    _loadDevMode();
+    // Check if SSH is already connected from a previous session
+    if (SshService.isConnected) {
+      setState(() {
+        _isSshConnected = true;
+      });
+    }
+  }
+
+  Future<void> _loadDevMode() async {
+    final creds = await SshService.loadSavedCredentials();
+    setState(() {
+      _developerMode = creds['developerMode'] as bool? ?? false;
+    });
   }
 
   Future<void> _loadSavedConnectionData() async {
@@ -51,18 +67,9 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
         _sshUserController.text = prefs.getString(_prefSshUser) ?? 'orangepi';
         _sshPassController.text = prefs.getString(_prefSshPass) ?? '';
         _sshPortController.text = prefs.getString(_prefSshPort) ?? '22';
-        
-        // If no SSH host saved, default to same as API IP
-        final savedSshHost = prefs.getString(_prefSshHost);
-        if (savedSshHost != null && savedSshHost.isNotEmpty) {
-          // User explicitly saved a different SSH host
-          // Keep it separate, but display won't have separate field for now
-          // We use the IP field for both unless user edits
-        }
       });
     } catch (e) {
       debugPrint('Load saved connection data error: $e');
-      // Defaults already set in controller constructors via text parameter
       _ipController.text = '192.168.1.100';
       _sshUserController.text = 'orangepi';
       _sshPortController.text = '22';
@@ -78,7 +85,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       final port = _sshPortController.text.trim();
 
       await prefs.setString(_prefIp, ip);
-      await prefs.setString(_prefSshHost, ip); // SSH host same as API IP
+      await prefs.setString(_prefSshHost, ip);
       await prefs.setString(_prefSshUser, user);
       await prefs.setString(_prefSshPass, pass);
       await prefs.setString(_prefSshPort, port);
@@ -102,7 +109,6 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
         _isHttpConnected = true;
         _statusMessage = 'HTTP API 连接成功 ✅';
       });
-      // Save IP on successful connection
       await _saveConnectionData();
     } catch (e) {
       setState(() {
@@ -142,6 +148,8 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
 
     if (success) {
       await _saveConnectionData();
+      // Start terminal session for output capture
+      await SshService.startTerminal();
     }
   }
 
@@ -179,12 +187,24 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     final provider = context.read<RobotProvider>();
     provider.setServerIp(_ipController.text.trim());
     provider.connect();
-    // Save current data before entering
     _saveConnectionData();
 
-    Navigator.of(context).pushReplacement(
+    Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => MainScreen()),
     );
+  }
+
+  void _openSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => SettingsScreen()),
+    ).then((_) async {
+      // Reload dev mode state when returning
+      await _loadDevMode();
+      // Refresh SSH connected status
+      setState(() {
+        _isSshConnected = SshService.isConnected;
+      });
+    });
   }
 
   @override
@@ -336,7 +356,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                         ),
                       ],
                     ),
-                    if (_isHttpConnected) ...[
+                    if (_isHttpConnected || _isSshConnected) ...[
                       SizedBox(height: 8),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -395,6 +415,16 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                 color: Colors.greenAccent,
                 onPressed: _isHttpConnected ? _enterControlPanel : null,
                 filled: true,
+              ),
+
+              SizedBox(height: 20),
+
+              // Settings button
+              _buildActionButton(
+                label: '设置',
+                icon: Icons.settings,
+                color: Colors.white70,
+                onPressed: _openSettings,
               ),
 
               SizedBox(height: 40),
