@@ -22,12 +22,28 @@ class RobotProvider extends ChangeNotifier {
   bool _connected = false;
   String _serverIp = '192.168.1.100';
   StreamSubscription? _telemetrySub;
-  
+
+  // HUD settings (persisted)
+  double _hudOpacity = 0.85;
+  double _hudScale = 1.0;
+
+  // Camera settings
+  int _cameraWidth = 640;
+  int _cameraHeight = 480;
+  List<Map<String, dynamic>> _cameraPresets = [];
+
   static const String _prefServerIp = 'last_server_ip';
-  
+  static const String _prefHudOpacity = 'hud_opacity';
+  static const String _prefHudScale = 'hud_scale';
+
   Map<String, dynamic> get state => _state;
   bool get connected => _connected;
   String get serverIp => _serverIp;
+  double get hudOpacity => _hudOpacity;
+  double get hudScale => _hudScale;
+  int get cameraWidth => _cameraWidth;
+  int get cameraHeight => _cameraHeight;
+  List<Map<String, dynamic>> get cameraPresets => _cameraPresets;
   
   double get speed => (_state['speed'] as num?)?.toDouble() ?? 0;
   double get battery => (_state['battery'] as num?)?.toDouble() ?? 0;
@@ -36,20 +52,72 @@ class RobotProvider extends ChangeNotifier {
   String get status => _state['status'] as String? ?? 'idle';
   
   RobotProvider() {
-    _loadSavedIp();
+    _loadSavedSettings();
   }
   
-  Future<void> _loadSavedIp() async {
+  Future<void> _loadSavedSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedIp = prefs.getString(_prefServerIp);
       if (savedIp != null && savedIp.isNotEmpty) {
         _serverIp = savedIp;
         ApiService.setServerIp(_serverIp);
+      }
+      _hudOpacity = prefs.getDouble(_prefHudOpacity) ?? 0.85;
+      _hudScale = prefs.getDouble(_prefHudScale) ?? 1.0;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Load saved settings error: $e');
+    }
+  }
+  
+  Future<void> _saveHudSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_prefHudOpacity, _hudOpacity);
+      await prefs.setDouble(_prefHudScale, _hudScale);
+    } catch (e) {
+      debugPrint('Save HUD settings error: $e');
+    }
+  }
+  
+  void setHudOpacity(double v) {
+    _hudOpacity = v.clamp(0.3, 1.0);
+    _saveHudSettings();
+    notifyListeners();
+  }
+  
+  void setHudScale(double v) {
+    _hudScale = v.clamp(0.5, 1.5);
+    _saveHudSettings();
+    notifyListeners();
+  }
+  
+  Future<void> loadCameraInfo() async {
+    try {
+      final info = await ApiService.getCameraInfo();
+      if (info['available'] == true) {
+        final current = info['current'];
+        _cameraWidth = current['width'] ?? 640;
+        _cameraHeight = current['height'] ?? 480;
+        _cameraPresets = List<Map<String, dynamic>>.from(info['presets'] ?? []);
         notifyListeners();
       }
     } catch (e) {
-      debugPrint('Load saved IP error: $e');
+      debugPrint('Camera info error: $e');
+    }
+  }
+  
+  Future<void> setCameraResolution(int width, int height) async {
+    try {
+      final result = await ApiService.setCameraResolution(width, height);
+      if (result['success'] == true) {
+        _cameraWidth = result['width'] ?? width;
+        _cameraHeight = result['height'] ?? height;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Camera resolution error: $e');
     }
   }
   

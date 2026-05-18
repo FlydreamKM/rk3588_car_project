@@ -15,22 +15,24 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   bool _showControls = true;
+  bool _showHudSettings = false;
 
   @override
   void initState() {
     super.initState();
-    // Lock to landscape
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
-    // Hide system UI for immersive experience
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    // Load camera presets after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<RobotProvider>().loadCameraInfo();
+    });
   }
 
   @override
   void dispose() {
-    // Restore orientations when leaving
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
@@ -44,6 +46,13 @@ class _MainScreenState extends State<MainScreen> {
   void _toggleControls() {
     setState(() {
       _showControls = !_showControls;
+      _showHudSettings = false;
+    });
+  }
+
+  void _toggleHudSettings() {
+    setState(() {
+      _showHudSettings = !_showHudSettings;
     });
   }
 
@@ -51,6 +60,8 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<RobotProvider>();
     final state = provider.state;
+    final hudOpacity = provider.hudOpacity;
+    final hudScale = provider.hudScale;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -67,14 +78,22 @@ class _MainScreenState extends State<MainScreen> {
           ),
 
           // === Top HUD Bar ===
-          if (_showControls) _buildTopHud(provider, state),
+          if (_showControls) _buildTopHud(provider, state, hudOpacity, hudScale),
+
+          // === HUD Settings overlay ===
+          if (_showControls && _showHudSettings)
+            _buildHudSettingsOverlay(provider),
 
           // === Bottom-left: Joystick overlay ===
           if (_showControls)
             Positioned(
               left: 20,
               bottom: 20,
-              child: _buildJoystickOverlay(),
+              child: Transform.scale(
+                scale: hudScale,
+                alignment: Alignment.bottomLeft,
+                child: _buildJoystickOverlay(),
+              ),
             ),
 
           // === Bottom-right: Quick actions ===
@@ -82,7 +101,11 @@ class _MainScreenState extends State<MainScreen> {
             Positioned(
               right: 20,
               bottom: 20,
-              child: _buildQuickActionsOverlay(context),
+              child: Transform.scale(
+                scale: hudScale,
+                alignment: Alignment.bottomRight,
+                child: _buildQuickActionsOverlay(context),
+              ),
             ),
 
           // === Right side: Mode & Servo ===
@@ -90,16 +113,11 @@ class _MainScreenState extends State<MainScreen> {
             Positioned(
               right: 20,
               top: 80,
-              child: _buildRightPanel(context, provider),
-            ),
-
-          // === Center bottom: Servo slider (when expanded) ===
-          if (_showControls)
-            Positioned(
-              left: MediaQuery.of(context).size.width * 0.25,
-              right: MediaQuery.of(context).size.width * 0.25,
-              bottom: 20,
-              child: _buildServoOverlay(context, provider),
+              child: Transform.scale(
+                scale: hudScale,
+                alignment: Alignment.topRight,
+                child: _buildRightPanel(context, provider),
+              ),
             ),
 
           // === Connection indicator (always visible) ===
@@ -113,11 +131,12 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildTopHud(RobotProvider provider, Map<String, dynamic> state) {
+  Widget _buildTopHud(RobotProvider provider, Map<String, dynamic> state, double opacity, double scale) {
     final speed = (state['speed'] as num?)?.toDouble() ?? 0;
     final battery = (state['battery'] as num?)?.toDouble() ?? 0;
     final mode = state['mode'] as String? ?? 'manual';
     final yaw = ((state['imu'] as Map<String, dynamic>?)?['yaw'] as num?)?.toDouble() ?? 0;
+    final fps = ((state['camera'] as Map<String, dynamic>?)?['fps'] as num?)?.toDouble() ?? 0;
 
     return Positioned(
       top: 0,
@@ -131,7 +150,7 @@ class _MainScreenState extends State<MainScreen> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                Colors.black.withOpacity(0.7),
+                Colors.black.withOpacity(opacity),
                 Colors.transparent,
               ],
             ),
@@ -149,25 +168,40 @@ class _MainScreenState extends State<MainScreen> {
               ),
               SizedBox(width: 12),
               // Speed
-              _buildHudItem(Icons.speed, '${speed.toStringAsFixed(1)} cm/s', Colors.cyanAccent),
-              SizedBox(width: 16),
+              _buildHudItem(Icons.speed, '${speed.toStringAsFixed(1)} cm/s', Colors.cyanAccent, scale),
+              SizedBox(width: 12),
               // Battery
               _buildHudItem(
                 battery > 30 ? Icons.battery_full : Icons.battery_alert,
                 '${battery.toStringAsFixed(0)}%',
                 battery > 30 ? Colors.green : Colors.red,
+                scale,
               ),
-              SizedBox(width: 16),
+              SizedBox(width: 12),
+              // FPS
+              _buildHudItem(Icons.videocam, '${fps.toStringAsFixed(0)} FPS', Colors.orangeAccent, scale),
+              SizedBox(width: 12),
               // Mode
-              _buildHudItem(Icons.auto_mode, mode.toUpperCase(), Colors.purpleAccent),
-              SizedBox(width: 16),
+              _buildHudItem(Icons.auto_mode, mode.toUpperCase(), Colors.purpleAccent, scale),
+              SizedBox(width: 12),
               // Yaw
-              _buildHudItem(Icons.compass_calibration, '${yaw.toStringAsFixed(1)}°', Colors.orangeAccent),
+              _buildHudItem(Icons.compass_calibration, '${yaw.toStringAsFixed(1)}°', Colors.orangeAccent, scale),
               Spacer(),
-              // Toggle controls hint
-              Text(
-                '点击画面${_showControls ? '隐藏' : '显示'}控件',
-                style: TextStyle(color: Colors.white54, fontSize: 10),
+              // HUD settings button
+              GestureDetector(
+                onTap: _toggleHudSettings,
+                child: Container(
+                  padding: EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: _showHudSettings ? Colors.cyanAccent.withOpacity(0.3) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    _showHudSettings ? Icons.settings : Icons.settings_outlined,
+                    color: Colors.white70,
+                    size: 16,
+                  ),
+                ),
               ),
             ],
           ),
@@ -176,21 +210,76 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildHudItem(IconData icon, String text, Color color) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: color, size: 14),
-        SizedBox(width: 4),
-        Text(
-          text,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
+  Widget _buildHudItem(IconData icon, String text, Color color, double scale) {
+    return Transform.scale(
+      scale: scale,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 14),
+          SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHudSettingsOverlay(RobotProvider provider) {
+    return Positioned(
+      top: 48,
+      right: 12,
+      child: GlassContainer(
+        gradient: LinearGradient(
+          colors: [
+            Colors.black.withOpacity(0.7),
+            Colors.black.withOpacity(0.5),
+          ],
+        ),
+        blur: 12,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: SizedBox(
+            width: 220,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('HUD 设置', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                SizedBox(height: 12),
+                Text('不透明度 ${(provider.hudOpacity * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                Slider(
+                  value: provider.hudOpacity,
+                  min: 0.3,
+                  max: 1.0,
+                  divisions: 14,
+                  activeColor: Colors.cyanAccent,
+                  inactiveColor: Colors.cyanAccent.withOpacity(0.2),
+                  onChanged: (v) => provider.setHudOpacity(v),
+                ),
+                SizedBox(height: 4),
+                Text('缩放 ${(provider.hudScale * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                Slider(
+                  value: provider.hudScale,
+                  min: 0.5,
+                  max: 1.5,
+                  divisions: 20,
+                  activeColor: Colors.purpleAccent,
+                  inactiveColor: Colors.purpleAccent.withOpacity(0.2),
+                  onChanged: (v) => provider.setHudScale(v),
+                ),
+              ],
+            ),
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -279,7 +368,6 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildRightPanel(BuildContext context, RobotProvider provider) {
     final isTrackMode = provider.mode == 'track';
-    final servoAngle = (provider.state['servo']?['angle_percent'] as num?)?.toDouble() ?? 0;
 
     return GlassContainer(
       gradient: LinearGradient(
@@ -333,10 +421,10 @@ class _MainScreenState extends State<MainScreen> {
               () => provider.setLight('blue', 'solid'),
             ),
             SizedBox(height: 8),
-            // Servo angle display
+            // Servo integrated hint
             Text(
-              '舵机 ${servoAngle.toStringAsFixed(0)}%',
-              style: TextStyle(color: Colors.white70, fontSize: 10),
+              '舵机：摇杆左右控制',
+              style: TextStyle(color: Colors.cyanAccent.withOpacity(0.7), fontSize: 9),
             ),
           ],
         ),
@@ -386,55 +474,6 @@ class _MainScreenState extends State<MainScreen> {
             Text(
               label,
               style: TextStyle(color: Colors.white, fontSize: 11),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildServoOverlay(BuildContext context, RobotProvider provider) {
-    final servoAngle = (provider.state['servo']?['angle_percent'] as num?)?.toDouble() ?? 0;
-
-    return GlassContainer(
-      gradient: LinearGradient(
-        colors: [
-          Colors.black.withOpacity(0.3),
-          Colors.black.withOpacity(0.15),
-        ],
-      ),
-      blur: 8,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            Text('L', style: TextStyle(color: Colors.grey, fontSize: 10)),
-            Expanded(
-              child: Slider(
-                value: servoAngle,
-                min: -100,
-                max: 100,
-                divisions: 20,
-                activeColor: Colors.cyanAccent,
-                inactiveColor: Colors.cyanAccent.withOpacity(0.2),
-                onChanged: (v) => provider.setServo(v),
-                onChangeEnd: (_) => provider.centerServo(),
-              ),
-            ),
-            Text('R', style: TextStyle(color: Colors.grey, fontSize: 10)),
-            SizedBox(width: 8),
-            GestureDetector(
-              onTap: () => provider.centerServo(),
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.green.withOpacity(0.5)),
-                ),
-                child: Text('回中', style: TextStyle(color: Colors.green, fontSize: 10)),
-              ),
             ),
           ],
         ),

@@ -3,7 +3,7 @@ import 'package:mjpeg_stream/mjpeg_stream.dart';
 import 'package:provider/provider.dart';
 import '../providers/robot_provider.dart';
 
-class VideoStreamWidget extends StatelessWidget {
+class VideoStreamWidget extends StatefulWidget {
   final BoxFit fit;
   final bool fullscreen;
 
@@ -14,17 +14,38 @@ class VideoStreamWidget extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<VideoStreamWidget> createState() => _VideoStreamWidgetState();
+}
+
+class _VideoStreamWidgetState extends State<VideoStreamWidget> {
+  String _streamUrl = '';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final provider = context.watch<RobotProvider>();
+    final ip = provider.serverIp;
+    final w = provider.cameraWidth;
+    final h = provider.cameraHeight;
+    _streamUrl = 'http://$ip:5000/video_feed?w=$w&h=$h';
+  }
+
+  @override
   Widget build(BuildContext context) {
     final provider = context.watch<RobotProvider>();
-    final streamUrl = 'http://${provider.serverIp}:5000/video_feed';
+    final fps = ((provider.state['camera'] as Map<String, dynamic>?) ?? {})['fps'] as num? ?? 0;
+    final ip = provider.serverIp;
+    final w = provider.cameraWidth;
+    final h = provider.cameraHeight;
+    final streamUrl = 'http://$ip:5000/video_feed?w=$w&h=$h';
 
-    if (fullscreen) {
+    if (widget.fullscreen) {
       return Stack(
         fit: StackFit.expand,
         children: [
           MJPEGStreamScreen(
             streamUrl: streamUrl,
-            fit: fit,
+            fit: widget.fit,
             showLiveIcon: false,
             watermarkText: "AI VISION FEED",
             showWatermark: false,
@@ -36,6 +57,34 @@ class VideoStreamWidget extends StatelessWidget {
               painter: _CrosshairPainter(),
             ),
           ),
+          // FPS overlay
+          Positioned(
+            top: 48,
+            right: 16,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '${fps.toStringAsFixed(1)} FPS',
+                style: TextStyle(
+                  color: Colors.greenAccent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+          ),
+          // Resolution picker
+          if (provider.cameraPresets.isNotEmpty)
+            Positioned(
+              top: 48,
+              left: 16,
+              child: _ResolutionPicker(),
+            ),
         ],
       );
     }
@@ -61,12 +110,12 @@ class VideoStreamWidget extends StatelessWidget {
             children: [
               MJPEGStreamScreen(
                 streamUrl: streamUrl,
-                fit: fit,
+                fit: widget.fit,
                 showLiveIcon: true,
                 watermarkText: "AI VISION FEED",
                 showWatermark: true,
               ),
-              // Live indicator overlay (if package doesn't provide)
+              // Live indicator overlay
               Positioned(
                 top: 12,
                 left: 12,
@@ -100,6 +149,27 @@ class VideoStreamWidget extends StatelessWidget {
                   ),
                 ),
               ),
+              // FPS overlay
+              Positioned(
+                top: 12,
+                right: 12,
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '${fps.toStringAsFixed(1)} FPS',
+                    style: TextStyle(
+                      color: Colors.greenAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+              ),
               // Watermark
               Positioned(
                 bottom: 12,
@@ -114,6 +184,91 @@ class VideoStreamWidget extends StatelessWidget {
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ResolutionPicker extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<RobotProvider>();
+    final presets = provider.cameraPresets;
+    final currentW = provider.cameraWidth;
+    final currentH = provider.cameraHeight;
+
+    return GestureDetector(
+      onTap: () => _showResolutionSheet(context, provider, presets),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.6),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.cyanAccent.withOpacity(0.5)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.videocam, color: Colors.cyanAccent, size: 12),
+            SizedBox(width: 4),
+            Text(
+              '$currentW×$currentH',
+              style: TextStyle(color: Colors.white, fontSize: 11),
+            ),
+            Icon(Icons.arrow_drop_down, color: Colors.white70, size: 14),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showResolutionSheet(BuildContext context, RobotProvider provider,
+      List<Map<String, dynamic>> presets) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.black.withOpacity(0.9),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '视频分辨率',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 12),
+              ...presets.map((p) {
+                final w = p['width'] as int;
+                final h = p['height'] as int;
+                final isCurrent = w == provider.cameraWidth && h == provider.cameraHeight;
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    '$w × $h',
+                    style: TextStyle(
+                      color: isCurrent ? Colors.cyanAccent : Colors.white,
+                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  trailing: isCurrent ? Icon(Icons.check, color: Colors.cyanAccent, size: 18) : null,
+                  onTap: () {
+                    provider.setCameraResolution(w, h);
+                    Navigator.pop(context);
+                  },
+                );
+              }),
             ],
           ),
         ),

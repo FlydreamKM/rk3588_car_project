@@ -201,7 +201,20 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
-  // ===================== SSH / Server =====================
+  // ===================== Camera =====================
+  static Future<Map<String, dynamic>> getCameraInfo() async {
+    final response = await http.get(Uri.parse('$baseUrl/api/camera/info'));
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> setCameraResolution(int width, int height) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/camera/resolution'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'width': width, 'height': height}),
+    );
+    return jsonDecode(response.body);
+  }
   static Future<Map<String, dynamic>> startServer() async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/ssh/start'),

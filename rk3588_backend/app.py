@@ -70,6 +70,7 @@ robot_state = {
     "obstacle_distance": 999,
     "target_locked": False,
     "emotion": "neutral",
+    "camera": {"fps": 0.0, "width": 640, "height": 480},
     "motor1": {"speed": 0, "angle": 0, "pwm": 0},
     "motor2": {"speed": 0, "angle": 0, "pwm": 0},
     "servo": {"angle_percent": 0, "enabled": servo_connected},
@@ -126,6 +127,10 @@ if tracking_connected:
     tracking_driver.register_callback(on_tracking_state)
 
 # ===================== Camera =====================
+_camera_fps = 0.0
+_camera_frame_count = 0
+_camera_fps_time = time.time()
+
 def find_camera():
     """Auto-detect available camera device"""
     # Try V4L2 indices 0-5
@@ -154,10 +159,51 @@ def find_camera():
 
 camera = find_camera()
 
+def get_camera_presets():
+    """Test preset resolutions and return available ones"""
+    if not camera.isOpened():
+        return []
+    presets = [(320,240), (640,480), (800,600), (1280,720), (1920,1080)]
+    available = []
+    # Save current
+    orig_w = int(camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+    orig_h = int(camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    for w, h in presets:
+        camera.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+        camera.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+        time.sleep(0.05)
+        actual_w = int(camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+        actual_h = int(camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        if actual_w >= w - 20 and actual_h >= h - 20:
+            available.append({"width": actual_w, "height": actual_h})
+    # Restore
+    camera.set(cv2.CAP_PROP_FRAME_WIDTH, orig_w)
+    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, orig_h)
+    return available
+
+def set_camera_resolution(w, h):
+    if not camera.isOpened():
+        return False, "Camera not available"
+    camera.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+    time.sleep(0.1)
+    actual_w = int(camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+    actual_h = int(camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    return True, {"width": actual_w, "height": actual_h}
+
 def generate_frames():
     """Generate MJPEG frames"""
+    global _camera_fps, _camera_frame_count, _camera_fps_time
     while True:
         success, frame = camera.read()
+        _camera_frame_count += 1
+        now = time.time()
+        if now - _camera_fps_time >= 1.0:
+            _camera_fps = _camera_frame_count / (now - _camera_fps_time)
+            _camera_frame_count = 0
+            _camera_fps_time = now
+            robot_state["camera"]["fps"] = round(_camera_fps, 1)
+        
         if not success:
             # Generate a placeholder frame if camera fails
             frame = create_placeholder_frame()
@@ -226,9 +272,43 @@ def draw_overlays(frame):
 
 @app.route('/video_feed')
 def video_feed():
-    """MJPEG video stream endpoint"""
+    """MJPEG video stream endpoint. Supports ?w=640&h=480 for resolution override."""
+    w = request.args.get('w', type=int)
+    h = request.args.get('h', type=int)
+    if w and h and camera.isOpened():
+        camera.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+        camera.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+        time.sleep(0.05)
     return Response(generate_frames(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/api/camera/info', methods=['GET'])
+def camera_info():
+    """Get camera info including available resolutions and current FPS"""
+    if not camera.isOpened():
+        return jsonify({"available": False, "error": "No camera"})
+    current_w = int(camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+    current_h = int(camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = robot_state.get("camera", {}).get("fps", 0)
+    presets = get_camera_presets()
+    return jsonify({
+        "available": True,
+        "current": {"width": current_w, "height": current_h, "fps": fps},
+        "presets": presets
+    })
+
+@app.route('/api/camera/resolution', methods=['POST'])
+def camera_resolution():
+    """Set camera resolution"""
+    data = request.json or {}
+    w = data.get('width', 640)
+    h = data.get('height', 480)
+    ok, result = set_camera_resolution(w, h)
+    if ok:
+        robot_state["camera"]["width"] = result["width"]
+        robot_state["camera"]["height"] = result["height"]
+        return jsonify({"success": True, "width": result["width"], "height": result["height"]})
+    return jsonify({"success": False, "error": result}), 503
 
 @app.route('/api/status', methods=['GET'])
 def get_status():

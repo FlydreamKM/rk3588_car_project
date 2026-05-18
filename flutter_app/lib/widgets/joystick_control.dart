@@ -13,11 +13,11 @@ class JoystickControl extends StatefulWidget {
 }
 
 class _JoystickControlState extends State<JoystickControl> {
-  // ignore: unused_field
   double _x = 0;
-  // ignore: unused_field
   double _y = 0;
   String _currentAction = 'stop';
+  double _lastServoX = 0;
+  int _servoThrottle = 0;
 
   void _sendCommand(double x, double y) {
     final provider = context.read<RobotProvider>();
@@ -42,6 +42,28 @@ class _JoystickControlState extends State<JoystickControl> {
       _currentAction = action;
       provider.sendControl(action, speed: speed.clamp(0, 100));
     }
+
+    // Integrate servo steering with joystick X axis
+    // Throttle: only update servo every 5th frame to avoid flooding
+    if ((x.abs() > 0.05) && (++_servoThrottle % 5 == 0)) {
+      final servoAngle = (x * 100).clamp(-100.0, 100.0);
+      // Only send if change is significant
+      if ((servoAngle - _lastServoX).abs() > 3) {
+        _lastServoX = servoAngle;
+        provider.setServo(servoAngle);
+      }
+    }
+  }
+
+  void _onDragEnd() {
+    setState(() {
+      _x = 0;
+      _y = 0;
+      _currentAction = 'stop';
+      _lastServoX = 0;
+    });
+    context.read<RobotProvider>().sendControl('stop');
+    context.read<RobotProvider>().centerServo();
   }
 
   @override
@@ -61,14 +83,7 @@ class _JoystickControlState extends State<JoystickControl> {
             });
             _sendCommand(details.x, details.y);
           },
-          onStickDragEnd: () {
-            setState(() {
-              _x = 0;
-              _y = 0;
-              _currentAction = 'stop';
-            });
-            context.read<RobotProvider>().sendControl('stop');
-          },
+          onStickDragEnd: _onDragEnd,
           base: JoystickBase(
             size: baseSize,
             decoration: JoystickBaseDecoration(
