@@ -68,21 +68,28 @@ class _MainScreenState extends State<MainScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // === Full-screen video stream ===
-          VideoStreamWidget(fit: BoxFit.cover, fullscreen: true),
-
-          // === Tap to toggle controls ===
+  // === Full-screen video stream (wrapped with tap toggle) ===
           GestureDetector(
-            onTap: _toggleControls,
-            child: Container(color: Colors.transparent),
+            onTap: () {
+              if (_showHudSettings) {
+                setState(() => _showHudSettings = false);
+              } else {
+                _toggleControls();
+              }
+            },
+            child: VideoStreamWidget(fit: BoxFit.cover, fullscreen: true),
           ),
 
           // === Top HUD Bar ===
           if (_showControls) _buildTopHud(provider, state, hudOpacity, hudScale),
 
-          // === HUD Settings overlay ===
-          if (_showControls && _showHudSettings)
-            _buildHudSettingsOverlay(provider),
+          // === Resolution picker (above video, avoids tap conflict) ===
+          if (_showControls)
+            Positioned(
+              top: 56,
+              left: 16,
+              child: ResolutionPicker(),
+            ),
 
           // === Bottom-left: Joystick overlay ===
           if (_showControls)
@@ -126,6 +133,10 @@ class _MainScreenState extends State<MainScreen> {
             left: 12,
             child: _buildConnectionBadge(provider.connected),
           ),
+
+          // === HUD Settings overlay (LAST = true topmost layer) ===
+          if (_showControls && _showHudSettings)
+            _buildHudSettingsOverlay(provider),
         ],
       ),
     );
@@ -233,7 +244,7 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildHudSettingsOverlay(RobotProvider provider) {
     return Positioned(
-      top: 48,
+      top: 56,
       right: 12,
       child: GlassContainer(
         gradient: LinearGradient(

@@ -78,13 +78,6 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
               ),
             ),
           ),
-          // Resolution picker
-          if (provider.cameraPresets.isNotEmpty)
-            Positioned(
-              top: 48,
-              left: 16,
-              child: _ResolutionPicker(),
-            ),
         ],
       );
     }
@@ -192,7 +185,7 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
   }
 }
 
-class _ResolutionPicker extends StatelessWidget {
+class ResolutionPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<RobotProvider>();
