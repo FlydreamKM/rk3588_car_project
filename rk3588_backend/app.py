@@ -126,9 +126,33 @@ if tracking_connected:
     tracking_driver.register_callback(on_tracking_state)
 
 # ===================== Camera =====================
-camera = cv2.VideoCapture(0)
-camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+def find_camera():
+    """Auto-detect available camera device"""
+    # Try V4L2 indices 0-5
+    for idx in range(6):
+        cap = cv2.VideoCapture(idx)
+        if cap.isOpened():
+            print(f"[Camera] Found working camera at index {idx}")
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            return cap
+        cap.release()
+    
+    # Fallback: try specific device paths
+    for path in ['/dev/video1', '/dev/video2', '/dev/video0']:
+        cap = cv2.VideoCapture(path)
+        if cap.isOpened():
+            print(f"[Camera] Found working camera at {path}")
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            return cap
+        cap.release()
+    
+    print("[Camera] No camera found, creating dummy capture")
+    # Return a dummy that will always fail isOpened()
+    return cv2.VideoCapture(-1)
+
+camera = find_camera()
 
 def generate_frames():
     """Generate MJPEG frames"""

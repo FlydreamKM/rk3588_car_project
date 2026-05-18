@@ -6,6 +6,11 @@ Cute Face Display for RK3588S Smart Car
 Uses pygame for hardware-accelerated rendering on RK3588S Mali GPU.
 Can be run standalone or controlled via Flask app.
 
+Auto-detects display backend:
+- X11: when running on KDE Plasma / desktop environment
+- KMS/DRM: when running on pure framebuffer (no X11)
+- Windowed: fallback for headless / testing
+
 Faces: neutral, happy, sad, angry, surprised, sleepy, love, cool
 """
 
@@ -16,9 +21,14 @@ import threading
 import time
 from typing import Optional
 
-# Pygame setup for RK3588S framebuffer (no X11 needed)
-os.environ['SDL_VIDEODRIVER'] = 'kmsdrm'  # Use KMS/DRM for direct HDMI
-# Fallbacks: 'fbcon' for pure framebuffer, 'x11' if desktop is running
+# Auto-detect display driver
+# If DISPLAY is set, we're on a desktop (KDE/GNOME/X11) -> use x11
+# Otherwise try kmsdrm for direct HDMI
+if os.environ.get('DISPLAY'):
+    os.environ['SDL_VIDEODRIVER'] = 'x11'
+elif os.path.exists('/dev/dri/card0'):
+    os.environ['SDL_VIDEODRIVER'] = 'kmsdrm'
+# Fallbacks: 'fbcon' for pure framebuffer, 'dummy' for headless
 
 import pygame
 
@@ -69,16 +79,30 @@ class CuteFaceDisplay:
             pygame.init()
             pygame.display.init()
 
-            # Try KMS/DRM first (best for RK3588S)
-            try:
+            # Detect display mode
+            is_x11 = os.environ.get('SDL_VIDEODRIVER') == 'x11'
+            
+            if is_x11:
+                # On KDE Plasma / desktop: create borderless window at 800x480
+                # Position at top-left of primary display
+                os.environ['SDL_VIDEO_WINDOW_POS'] = '0,0'
                 self.screen = pygame.display.set_mode(
                     (self.WIDTH, self.HEIGHT),
-                    pygame.FULLSCREEN | pygame.DOUBLEBUF | pygame.HWSURFACE
+                    pygame.NOFRAME | pygame.DOUBLEBUF
                 )
-            except Exception:
-                # Fallback to windowed if display driver fails
-                self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
-                print("[FaceDisplay] Falling back to windowed mode")
+                print("[FaceDisplay] Running in X11 windowed mode (KDE Plasma)")
+            else:
+                # Try KMS/DRM first (best for RK3588S direct HDMI)
+                try:
+                    self.screen = pygame.display.set_mode(
+                        (self.WIDTH, self.HEIGHT),
+                        pygame.FULLSCREEN | pygame.DOUBLEBUF | pygame.HWSURFACE
+                    )
+                    print("[FaceDisplay] Running in KMS/DRM fullscreen mode")
+                except Exception:
+                    # Fallback to windowed if display driver fails
+                    self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
+                    print("[FaceDisplay] Falling back to windowed mode")
 
             pygame.mouse.set_visible(False)
             self.running = True
@@ -400,3 +424,5 @@ if __name__ == "__main__":
             display.stop()
     else:
         print("Display not available (no HDMI or no pygame).")
+        print("  - If running on KDE Plasma, make sure DISPLAY=:1 is set")
+        print("  - If running headless, connect HDMI and restart")
