@@ -222,45 +222,67 @@ class ResolutionPicker extends StatelessWidget {
       List<Map<String, dynamic>> presets) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.black.withOpacity(0.9),
+      backgroundColor: Colors.black.withOpacity(0.92),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
+      isScrollControlled: false,
       builder: (_) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(16),
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.fromLTRB(24, 20, 24, 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text(
                 '视频分辨率',
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 16,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              SizedBox(height: 12),
+              SizedBox(height: 16),
               ...presets.map((p) {
                 final w = p['width'] as int;
                 final h = p['height'] as int;
                 final fps = p['fps'] as int? ?? 0;
                 final isCurrent = w == provider.cameraWidth && h == provider.cameraHeight;
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    '$w × $h ${fps > 0 ? "@${fps}FPS" : ""}',
-                    style: TextStyle(
-                      color: isCurrent ? Colors.cyanAccent : Colors.white,
-                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                    ),
-                  ),
-                  trailing: isCurrent ? Icon(Icons.check, color: Colors.cyanAccent, size: 18) : null,
+                return InkWell(
                   onTap: () {
                     provider.setCameraResolution(w, h, fps: fps > 0 ? fps : null);
                     Navigator.pop(context);
                   },
+                  child: Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                    margin: EdgeInsets.only(bottom: 4),
+                    decoration: BoxDecoration(
+                      color: isCurrent ? Colors.cyanAccent.withOpacity(0.15) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (isCurrent)
+                          Icon(Icons.check, color: Colors.cyanAccent, size: 18)
+                        else
+                          SizedBox(width: 18),
+                        SizedBox(width: 8),
+                        Text(
+                          '$w × $h ${fps > 0 ? "@${fps}FPS" : ""}',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: isCurrent ? Colors.cyanAccent : Colors.white70,
+                            fontSize: 15,
+                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 );
               }),
             ],
