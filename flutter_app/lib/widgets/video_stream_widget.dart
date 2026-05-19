@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mjpeg_stream/mjpeg_stream.dart';
 import 'package:provider/provider.dart';
 import '../providers/robot_provider.dart';
+import 'cube_3d_widget.dart';
 
 class VideoStreamWidget extends StatefulWidget {
   final BoxFit fit;
@@ -78,6 +79,21 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
               ),
             ),
           ),
+          // ── Motor detailed HUD (bottom-left) ──
+          if (provider.showMotorHud)
+            _buildMotorHudOverlay(provider),
+
+          // ── IMU detailed HUD (bottom-right) ──
+          if (provider.showImuHud)
+            _buildImuHudOverlay(provider),
+
+          // ── 3D Cube overlay (center-right) ──
+          if (provider.showCube3D)
+            Positioned(
+              right: 20,
+              top: MediaQuery.of(context).size.height / 2 - 60,
+              child: Cube3DWidget(size: 100),
+            ),
         ],
       );
     }
@@ -177,11 +193,178 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
                   ),
                 ),
               ),
+              // Motor HUD (small, bottom-left)
+              if (provider.showMotorHud)
+                Positioned(
+                  bottom: 8,
+                  left: 8,
+                  child: _buildMotorMiniHud(provider),
+                ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildMotorHudOverlay(RobotProvider provider) {
+    final m1 = provider.state['motor1'] as Map<String, dynamic>? ?? {};
+    final m2 = provider.state['motor2'] as Map<String, dynamic>? ?? {};
+
+    return Positioned(
+      left: 16,
+      bottom: 20,
+      child: Container(
+        padding: EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.6),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'MOTOR',
+              style: TextStyle(
+                color: Colors.cyanAccent,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2,
+              ),
+            ),
+            SizedBox(height: 6),
+            _buildMotorRow('M1', m1),
+            SizedBox(height: 4),
+            _buildMotorRow('M2', m2),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMotorMiniHud(RobotProvider provider) {
+    final m1 = provider.state['motor1'] as Map<String, dynamic>? ?? {};
+    final m2 = provider.state['motor2'] as Map<String, dynamic>? ?? {};
+
+    return Container(
+      padding: EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'M1 s=${_fmt(m1['speed'])} a=${_fmt(m1['angle'])} pwm=${_fmt(m1['pwm'])}',
+            style: TextStyle(color: Colors.cyanAccent, fontSize: 9, fontFamily: 'monospace'),
+          ),
+          Text(
+            'M2 s=${_fmt(m2['speed'])} a=${_fmt(m2['angle'])} pwm=${_fmt(m2['pwm'])}',
+            style: TextStyle(color: Colors.cyanAccent, fontSize: 9, fontFamily: 'monospace'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMotorRow(String label, Map<String, dynamic> data) {
+    final speed = (data['speed'] as num?)?.toDouble() ?? 0;
+    final angle = (data['angle'] as num?)?.toDouble() ?? 0;
+    final pwm = (data['pwm'] as num?)?.toDouble() ?? 0;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 22,
+          child: Text(
+            label,
+            style: TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold),
+          ),
+        ),
+        Text(
+          's=${speed.toStringAsFixed(1).padLeft(6)}  a=${angle.toStringAsFixed(1).padLeft(6)}  pwm=${pwm.toStringAsFixed(1).padLeft(6)}',
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.8),
+            fontSize: 10,
+            fontFamily: 'monospace',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImuHudOverlay(RobotProvider provider) {
+    final imu = provider.state['imu'] as Map<String, dynamic>? ?? {};
+    final pitch = (imu['pitch'] as num?)?.toDouble() ?? 0;
+    final roll = (imu['roll'] as num?)?.toDouble() ?? 0;
+    final yaw = (imu['yaw'] as num?)?.toDouble() ?? 0;
+
+    return Positioned(
+      right: 16,
+      bottom: 20,
+      child: Container(
+        padding: EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.6),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.purpleAccent.withOpacity(0.3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'IMU',
+              style: TextStyle(
+                color: Colors.purpleAccent,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2,
+              ),
+            ),
+            SizedBox(height: 6),
+            _buildImuRow('Pitch', pitch, Colors.redAccent),
+            SizedBox(height: 3),
+            _buildImuRow('Roll', roll, Colors.greenAccent),
+            SizedBox(height: 3),
+            _buildImuRow('Yaw', yaw, Colors.orangeAccent),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImuRow(String label, double value, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 40,
+          child: Text(
+            label,
+            style: TextStyle(color: color.withOpacity(0.7), fontSize: 10),
+          ),
+        ),
+        Text(
+          '${value.toStringAsFixed(1).padLeft(6)}°',
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.9),
+            fontSize: 10,
+            fontFamily: 'monospace',
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _fmt(dynamic v) {
+    final d = (v as num?)?.toDouble() ?? 0;
+    return d.toStringAsFixed(1);
   }
 }
 
@@ -278,11 +461,8 @@ class _CrosshairPainter extends CustomPainter {
     final cx = size.width / 2;
     final cy = size.height / 2;
 
-    // Horizontal line
     canvas.drawLine(Offset(cx - 20, cy), Offset(cx + 20, cy), paint);
-    // Vertical line
     canvas.drawLine(Offset(cx, cy - 20), Offset(cx, cy + 20), paint);
-    // Circle
     canvas.drawCircle(Offset(cx, cy), 10, paint..style = PaintingStyle.stroke);
   }
 

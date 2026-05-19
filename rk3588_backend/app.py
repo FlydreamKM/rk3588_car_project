@@ -24,7 +24,7 @@ app = Flask(__name__)
 CORS(app)  # Allow cross-origin for Flutter
 
 # ===================== Motor Driver =====================
-MOTOR_PORT = os.environ.get('MOTOR_PORT', '/dev/ttyUSB0')
+MOTOR_PORT = os.environ.get('MOTOR_PORT', '/dev/ttyACM0')
 motor_driver = MotorDriver(port=MOTOR_PORT)
 motor_connected = False
 
@@ -400,11 +400,11 @@ def start_tracking_mode():
 
 @app.route('/api/tracking/stop', methods=['POST'])
 def stop_tracking_mode():
-    """Disable line-tracking mode, return to manual"""
+    """Disable line-tracking mode, return to manual (soft stop)"""
     global robot_state
     robot_state["mode"] = "manual"
     if motor_connected:
-        motor_driver.emergency_stop()
+        _soft_stop_motor(255)
     if display_connected:
         face_display.set_emotion("neutral")
     return jsonify({"success": True, "mode": "manual"})
@@ -508,8 +508,7 @@ def control():
                 if servo_connected:
                     servo_driver.set_angle(50)
             elif action == 'stop':
-                motor_driver.emergency_stop()
-                motor_driver.enable(255)  # Re-enable after stop
+                _soft_stop_motor(255)
                 if servo_connected:
                     servo_driver.center()
             
@@ -598,16 +597,37 @@ def motor_disable():
     motor_driver.disable(motor)
     return jsonify({"success": True, "motor": motor, "action": "disable"})
 
+# Soft stop: set speed 0 and lock position at current angle
+def _soft_stop_motor(motor: int):
+    """Send speed=0 + position mode lock at current angle"""
+    state = motor_driver.get_state()
+    angle = 0.0
+    if state:
+        if motor == 255:
+            m1_angle = state['motor1']['angle']
+            m2_angle = state['motor2']['angle']
+            motor_driver.set_target(0, 1, 0.0, m1_angle, 10.0, 10.0)
+            motor_driver.set_target(1, 1, 0.0, m2_angle, 10.0, 10.0)
+            return
+        else:
+            angle = state['motor1']['angle'] if motor == 0 else state['motor2']['angle']
+    motor_driver.set_target(motor, 1, 0.0, angle, 10.0, 10.0)
+
 @app.route('/api/motor/stop', methods=['POST'])
 def motor_stop():
-    """Emergency stop"""
+    """Soft stop: set speed to 0 and lock current position (no emergency)"""
     if not motor_connected:
         return jsonify({"success": False, "error": "Motor not connected"}), 503
+
     motor = request.json.get('motor', 255)
-    motor_driver.emergency_stop(motor)
-    if servo_connected:
-        servo_driver.center()
-    return jsonify({"success": True, "motor": motor, "action": "emergency_stop"})
+
+    try:
+        _soft_stop_motor(motor)
+        if servo_connected:
+            servo_driver.center()
+        return jsonify({"success": True, "motor": motor, "action": "soft_stop"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/motor/home', methods=['POST'])
 def motor_home():

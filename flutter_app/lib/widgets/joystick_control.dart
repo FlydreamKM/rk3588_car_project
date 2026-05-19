@@ -62,7 +62,8 @@ class _JoystickControlState extends State<JoystickControl> {
       _currentAction = 'stop';
       _lastServoX = 0;
     });
-    context.read<RobotProvider>().sendControl('stop');
+    // Soft stop: speed=0 + position mode lock instead of emergency stop
+    context.read<RobotProvider>().setMotorStopAndLock();
     context.read<RobotProvider>().centerServo();
   }
 

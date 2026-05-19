@@ -265,6 +265,27 @@ class _MainScreenState extends State<MainScreen> {
               children: [
                 Text('HUD 设置', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
                 SizedBox(height: 12),
+                // Motor HUD toggle
+                _buildHudToggle('电机数据', provider.showMotorHud, provider.setShowMotorHud),
+                SizedBox(height: 6),
+                // IMU HUD toggle
+                _buildHudToggle('IMU 数据', provider.showImuHud, provider.setShowImuHud),
+                SizedBox(height: 6),
+                // 3D Cube toggle
+                _buildHudToggle('3D 方块', provider.showCube3D, provider.setShowCube3D),
+                if (provider.showCube3D) ...[
+                  Text('方块透明度 ${(provider.cubeOpacity * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                  Slider(
+                    value: provider.cubeOpacity,
+                    min: 0.0,
+                    max: 1.0,
+                    divisions: 20,
+                    activeColor: Colors.purpleAccent,
+                    inactiveColor: Colors.purpleAccent.withOpacity(0.2),
+                    onChanged: (v) => provider.setCubeOpacity(v),
+                  ),
+                ],
+                Divider(color: Colors.white.withOpacity(0.1), height: 16),
                 Text('不透明度 ${(provider.hudOpacity * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 11)),
                 Slider(
                   value: provider.hudOpacity,
@@ -291,6 +312,25 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildHudToggle(String label, bool value, ValueChanged<bool> onChanged) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(label, style: TextStyle(color: Colors.white70, fontSize: 12)),
+        ),
+        SizedBox(
+          height: 28,
+          child: Switch(
+            value: value,
+            onChanged: onChanged,
+            activeColor: Colors.cyanAccent,
+            activeTrackColor: Colors.cyanAccent.withOpacity(0.3),
+          ),
+        ),
+      ],
     );
   }
 
