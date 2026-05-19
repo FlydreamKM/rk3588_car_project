@@ -193,100 +193,75 @@ class ResolutionPicker extends StatelessWidget {
     final currentW = provider.cameraWidth;
     final currentH = provider.cameraHeight;
 
-    return GestureDetector(
-      onTap: () => _showResolutionSheet(context, provider, presets),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.6),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.cyanAccent.withOpacity(0.5)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.videocam, color: Colors.cyanAccent, size: 12),
-            SizedBox(width: 4),
-            Text(
-              '$currentW×$currentH',
-              style: TextStyle(color: Colors.white, fontSize: 11),
-            ),
-            Icon(Icons.arrow_drop_down, color: Colors.white70, size: 14),
-          ],
-        ),
-      ),
+    final currentValue = presets.firstWhere(
+      (p) => p['width'] == currentW && p['height'] == currentH,
+      orElse: () => {'width': currentW, 'height': currentH, 'fps': 0},
     );
-  }
 
-  void _showResolutionSheet(BuildContext context, RobotProvider provider,
-      List<Map<String, dynamic>> presets) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.black.withOpacity(0.92),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.cyanAccent.withOpacity(0.5)),
       ),
-      isScrollControlled: false,
-      builder: (_) => SafeArea(
-        child: Container(
-          width: double.infinity,
-          padding: EdgeInsets.fromLTRB(24, 20, 24, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                '视频分辨率',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              SizedBox(height: 16),
-              ...presets.map((p) {
-                final w = p['width'] as int;
-                final h = p['height'] as int;
-                final fps = p['fps'] as int? ?? 0;
-                final isCurrent = w == provider.cameraWidth && h == provider.cameraHeight;
-                return InkWell(
-                  onTap: () {
-                    provider.setCameraResolution(w, h, fps: fps > 0 ? fps : null);
-                    Navigator.pop(context);
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                    margin: EdgeInsets.only(bottom: 4),
-                    decoration: BoxDecoration(
-                      color: isCurrent ? Colors.cyanAccent.withOpacity(0.15) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (isCurrent)
-                          Icon(Icons.check, color: Colors.cyanAccent, size: 18)
-                        else
-                          SizedBox(width: 18),
-                        SizedBox(width: 8),
-                        Text(
-                          '$w × $h ${fps > 0 ? "@${fps}FPS" : ""}',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: isCurrent ? Colors.cyanAccent : Colors.white70,
-                            fontSize: 15,
-                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                          ),
-                        ),
-                      ],
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<Map<String, dynamic>>(
+          value: currentValue,
+          isDense: true,
+          icon: Icon(Icons.arrow_drop_down, color: Colors.white70, size: 14),
+          dropdownColor: Colors.black.withOpacity(0.92),
+          borderRadius: BorderRadius.circular(10),
+          items: presets.map((p) {
+            final w = p['width'] as int;
+            final h = p['height'] as int;
+            final fps = p['fps'] as int? ?? 0;
+            final isCurrent = w == currentW && h == currentH;
+            return DropdownMenuItem<Map<String, dynamic>>(
+              value: p,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isCurrent)
+                    Icon(Icons.check, color: Colors.cyanAccent, size: 14)
+                  else
+                    SizedBox(width: 14),
+                  SizedBox(width: 6),
+                  Text(
+                    '$w × $h ${fps > 0 ? "@${fps}FPS" : ""}',
+                    style: TextStyle(
+                      color: isCurrent ? Colors.cyanAccent : Colors.white70,
+                      fontSize: 13,
+                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
                     ),
                   ),
-                );
-              }),
-            ],
-          ),
+                ],
+              ),
+            );
+          }).toList(),
+          selectedItemBuilder: (_) => presets.map((p) {
+            final w = p['width'] as int;
+            final h = p['height'] as int;
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.videocam, color: Colors.cyanAccent, size: 12),
+                SizedBox(width: 4),
+                Text(
+                  '$w×$h',
+                  style: TextStyle(color: Colors.white, fontSize: 11),
+                ),
+              ],
+            );
+          }).toList(),
+          onChanged: (p) {
+            if (p != null) {
+              final w = p['width'] as int;
+              final h = p['height'] as int;
+              final fps = p['fps'] as int? ?? 0;
+              provider.setCameraResolution(w, h, fps: fps > 0 ? fps : null);
+            }
+          },
         ),
       ),
     );
