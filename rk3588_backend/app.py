@@ -252,9 +252,9 @@ def create_placeholder_frame():
         frame = cv2.imread('/usr/share/pixmaps/fedora-logo-small.png') if os.path.exists('/usr/share/pixmaps/fedora-logo-small.png') else None
     if frame is None:
         # Create a blank frame with text
-        frame = cv2.zeros((480, 640, 3), dtype=np.uint8)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
         cv2.putText(frame, "Camera Offline", (180, 240), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 2)
-    return cv2.resize(frame, (640, 480)) if frame is not None else cv2.zeros((480, 640, 3), dtype=np.uint8)
+    return cv2.resize(frame, (640, 480)) if frame is not None else np.zeros((480, 640, 3), dtype=np.uint8)
 
 def draw_overlays(frame):
     """Draw HUD overlays on video frame"""
