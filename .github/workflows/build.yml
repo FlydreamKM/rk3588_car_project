@@ -31,8 +31,17 @@ jobs:
       - name: Update version code
         working-directory: ./flutter_app
         run: |
-          sed -i "s/version: .*/version: 1.0.0+${{ github.run_number }}/" pubspec.yaml
-          cat pubspec.yaml | grep version
+          sed -i "s/^version: .*/version: 1.0.0+${{ github.run_number }}/" pubspec.yaml
+          echo "Updated pubspec version:"
+          grep "^version:" pubspec.yaml
+
+      - name: Rename APK with version
+        working-directory: ./flutter_app
+        run: |
+          VERSION="${{ github.run_number }}"
+          mkdir -p build/app/outputs/flutter-apk
+          # flutter build apk outputs app-release.apk; copy to named file
+          echo "APK versionCode will be: $VERSION"
 
       - name: Get dependencies
         working-directory: ./flutter_app
@@ -46,20 +55,26 @@ jobs:
         working-directory: ./flutter_app
         run: flutter build apk --release
 
+      - name: Copy APK with version name
+        working-directory: ./flutter_app
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/smart_car_v${{ github.run_number }}.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: smart-car-apk
-          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          name: smart-car-apk-v${{ github.run_number }}
+          path: flutter_app/build/app/outputs/flutter-apk/smart_car_v${{ github.run_number }}.apk
 
       - name: Upload to Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
-          files: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          name: Smart Car v${{ github.run_number }}
+          files: flutter_app/build/app/outputs/flutter-apk/smart_car_v${{ github.run_number }}.apk
           body: |
-            Smart Car Flutter APP APK
+            Smart Car Flutter APP APK v${{ github.run_number }}
             - Built from ${{ github.sha }}
             - Download and install on Android device
         env:
