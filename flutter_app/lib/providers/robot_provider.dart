@@ -24,6 +24,10 @@ class RobotProvider extends ChangeNotifier {
   String _serverIp = '192.168.1.100';
   StreamSubscription? _telemetrySub;
 
+  // Screen size (read at startup)
+  double _screenWidth = 360;
+  double _screenHeight = 640;
+
   // HUD settings (persisted)
   double _hudOpacity = 0.85;
   double _hudScale = 1.0;
@@ -33,6 +37,17 @@ class RobotProvider extends ChangeNotifier {
   // 3D Cube settings (persisted)
   bool _showCube3D = true;
   double _cubeOpacity = 0.5;
+
+  // Emotion panel expanded (persisted)
+  bool _emotionExpanded = false;
+
+  // Draggable HUD positions (persisted as ratio 0.0-1.0)
+  double _motorHudX = 0.02;  // left ratio
+  double _motorHudY = 0.75;  // top ratio
+  double _imuHudX = 0.75;    // left ratio
+  double _imuHudY = 0.75;    // top ratio
+  bool _motorHudLocked = true;
+  bool _imuHudLocked = true;
 
   // Camera settings
   int _cameraWidth = 640;
@@ -46,6 +61,13 @@ class RobotProvider extends ChangeNotifier {
   static const String _prefShowImuHud = 'show_imu_hud';
   static const String _prefShowCube3D = 'show_cube_3d';
   static const String _prefCubeOpacity = 'cube_opacity';
+  static const String _prefEmotionExpanded = 'emotion_expanded';
+  static const String _prefMotorHudX = 'motor_hud_x';
+  static const String _prefMotorHudY = 'motor_hud_y';
+  static const String _prefImuHudX = 'imu_hud_x';
+  static const String _prefImuHudY = 'imu_hud_y';
+  static const String _prefMotorHudLocked = 'motor_hud_locked';
+  static const String _prefImuHudLocked = 'imu_hud_locked';
 
   Map<String, dynamic> get state => _state;
   bool get connected => _connected;
@@ -59,6 +81,16 @@ class RobotProvider extends ChangeNotifier {
   int get cameraWidth => _cameraWidth;
   int get cameraHeight => _cameraHeight;
   List<Map<String, dynamic>> get cameraPresets => _cameraPresets;
+
+  double get screenWidth => _screenWidth;
+  double get screenHeight => _screenHeight;
+  bool get emotionExpanded => _emotionExpanded;
+  double get motorHudX => _motorHudX;
+  double get motorHudY => _motorHudY;
+  double get imuHudX => _imuHudX;
+  double get imuHudY => _imuHudY;
+  bool get motorHudLocked => _motorHudLocked;
+  bool get imuHudLocked => _imuHudLocked;
 
   double get speed => (_state['speed'] as num?)?.toDouble() ?? 0;
   double get battery => (_state['battery'] as num?)?.toDouble() ?? 0;
@@ -84,6 +116,13 @@ class RobotProvider extends ChangeNotifier {
       _showImuHud = prefs.getBool(_prefShowImuHud) ?? true;
       _showCube3D = prefs.getBool(_prefShowCube3D) ?? true;
       _cubeOpacity = prefs.getDouble(_prefCubeOpacity) ?? 0.5;
+      _emotionExpanded = prefs.getBool(_prefEmotionExpanded) ?? false;
+      _motorHudX = prefs.getDouble(_prefMotorHudX) ?? 0.02;
+      _motorHudY = prefs.getDouble(_prefMotorHudY) ?? 0.75;
+      _imuHudX = prefs.getDouble(_prefImuHudX) ?? 0.75;
+      _imuHudY = prefs.getDouble(_prefImuHudY) ?? 0.75;
+      _motorHudLocked = prefs.getBool(_prefMotorHudLocked) ?? true;
+      _imuHudLocked = prefs.getBool(_prefImuHudLocked) ?? true;
       notifyListeners();
     } catch (e) {
       debugPrint('Load saved settings error: $e');
@@ -99,9 +138,22 @@ class RobotProvider extends ChangeNotifier {
       await prefs.setBool(_prefShowImuHud, _showImuHud);
       await prefs.setBool(_prefShowCube3D, _showCube3D);
       await prefs.setDouble(_prefCubeOpacity, _cubeOpacity);
+      await prefs.setBool(_prefEmotionExpanded, _emotionExpanded);
+      await prefs.setDouble(_prefMotorHudX, _motorHudX);
+      await prefs.setDouble(_prefMotorHudY, _motorHudY);
+      await prefs.setDouble(_prefImuHudX, _imuHudX);
+      await prefs.setDouble(_prefImuHudY, _imuHudY);
+      await prefs.setBool(_prefMotorHudLocked, _motorHudLocked);
+      await prefs.setBool(_prefImuHudLocked, _imuHudLocked);
     } catch (e) {
       debugPrint('Save HUD settings error: $e');
     }
+  }
+
+  void setScreenSize(double w, double h) {
+    _screenWidth = w;
+    _screenHeight = h;
+    notifyListeners();
   }
 
   void setHudOpacity(double v) {
@@ -136,6 +188,38 @@ class RobotProvider extends ChangeNotifier {
 
   void setCubeOpacity(double v) {
     _cubeOpacity = v.clamp(0.0, 1.0);
+    _saveHudSettings();
+    notifyListeners();
+  }
+
+  void setEmotionExpanded(bool v) {
+    _emotionExpanded = v;
+    _saveHudSettings();
+    notifyListeners();
+  }
+
+  void setMotorHudPos(double x, double y) {
+    _motorHudX = x.clamp(0.0, 1.0);
+    _motorHudY = y.clamp(0.0, 1.0);
+    _saveHudSettings();
+    notifyListeners();
+  }
+
+  void setImuHudPos(double x, double y) {
+    _imuHudX = x.clamp(0.0, 1.0);
+    _imuHudY = y.clamp(0.0, 1.0);
+    _saveHudSettings();
+    notifyListeners();
+  }
+
+  void setMotorHudLocked(bool v) {
+    _motorHudLocked = v;
+    _saveHudSettings();
+    notifyListeners();
+  }
+
+  void setImuHudLocked(bool v) {
+    _imuHudLocked = v;
     _saveHudSettings();
     notifyListeners();
   }

@@ -27,7 +27,11 @@ class _MainScreenState extends State<MainScreen> {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // Load camera presets after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<RobotProvider>().loadCameraInfo();
+      final provider = context.read<RobotProvider>();
+      provider.loadCameraInfo();
+      // Record screen size for adaptive layout
+      final size = MediaQuery.of(context).size;
+      provider.setScreenSize(size.width, size.height);
     });
   }
 
@@ -62,13 +66,15 @@ class _MainScreenState extends State<MainScreen> {
     final state = provider.state;
     final hudOpacity = provider.hudOpacity;
     final hudScale = provider.hudScale;
+    final screenW = provider.screenWidth;
+    final screenH = provider.screenHeight;
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
         children: [
-  // === Full-screen video stream (wrapped with tap toggle) ===
+          // === Full-screen video stream (wrapped with tap toggle) ===
           GestureDetector(
             onTap: () {
               if (_showHudSettings) {
@@ -81,7 +87,7 @@ class _MainScreenState extends State<MainScreen> {
           ),
 
           // === Top HUD Bar ===
-          if (_showControls) _buildTopHud(provider, state, hudOpacity, hudScale),
+          if (_showControls) _buildTopHud(provider, state, hudOpacity, hudScale, screenW),
 
           // === Resolution picker (above video, avoids tap conflict) ===
           if (_showControls)
@@ -136,18 +142,18 @@ class _MainScreenState extends State<MainScreen> {
 
           // === HUD Settings overlay (LAST = true topmost layer) ===
           if (_showControls && _showHudSettings)
-            _buildHudSettingsOverlay(provider),
+            _buildHudSettingsOverlay(provider, screenW, screenH),
         ],
       ),
     );
   }
 
-  Widget _buildTopHud(RobotProvider provider, Map<String, dynamic> state, double opacity, double scale) {
+  Widget _buildTopHud(RobotProvider provider, Map<String, dynamic> state, double opacity, double scale, double screenW) {
     final speed = (state['speed'] as num?)?.toDouble() ?? 0;
     final battery = (state['battery'] as num?)?.toDouble() ?? 0;
     final mode = state['mode'] as String? ?? 'manual';
-    final yaw = ((state['imu'] as Map<String, dynamic>?)?['yaw'] as num?)?.toDouble() ?? 0;
-    final fps = ((state['camera'] as Map<String, dynamic>?)?['fps'] as num?)?.toDouble() ?? 0;
+    final yaw = ((state['imu'] as Map<String, dynamic>?) ?? {})['yaw'] as num? ?? 0;
+    final fps = ((state['camera'] as Map<String, dynamic>?) ?? {})['fps'] as num? ?? 0;
 
     return Positioned(
       top: 0,
@@ -242,7 +248,12 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildHudSettingsOverlay(RobotProvider provider) {
+  Widget _buildHudSettingsOverlay(RobotProvider provider, double screenW, double screenH) {
+    // Adaptive width: if screen is narrow (< 500), use 85% width
+    final panelW = (screenW > 0 && screenW < 500) ? screenW * 0.85 : 260.0;
+    // Max height to avoid overflow: 75% of screen height
+    final maxH = screenH > 0 ? screenH * 0.75 : 300.0;
+
     return Positioned(
       top: 56,
       right: 12,
@@ -255,59 +266,64 @@ class _MainScreenState extends State<MainScreen> {
         ),
         blur: 12,
         borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: SizedBox(
-            width: 220,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('HUD 设置', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                SizedBox(height: 12),
-                // Motor HUD toggle
-                _buildHudToggle('电机数据', provider.showMotorHud, provider.setShowMotorHud),
-                SizedBox(height: 6),
-                // IMU HUD toggle
-                _buildHudToggle('IMU 数据', provider.showImuHud, provider.setShowImuHud),
-                SizedBox(height: 6),
-                // 3D Cube toggle
-                _buildHudToggle('3D 方块', provider.showCube3D, provider.setShowCube3D),
-                if (provider.showCube3D) ...[
-                  Text('方块透明度 ${(provider.cubeOpacity * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 10)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: panelW,
+            maxHeight: maxH,
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('HUD 设置', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 12),
+                  // Motor HUD toggle
+                  _buildHudToggle('电机数据', provider.showMotorHud, provider.setShowMotorHud),
+                  SizedBox(height: 6),
+                  // IMU HUD toggle
+                  _buildHudToggle('IMU 数据', provider.showImuHud, provider.setShowImuHud),
+                  SizedBox(height: 6),
+                  // 3D Cube toggle
+                  _buildHudToggle('3D 方块', provider.showCube3D, provider.setShowCube3D),
+                  if (provider.showCube3D) ...[
+                    Text('方块透明度 ${(provider.cubeOpacity * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                    Slider(
+                      value: provider.cubeOpacity,
+                      min: 0.0,
+                      max: 1.0,
+                      divisions: 20,
+                      activeColor: Colors.purpleAccent,
+                      inactiveColor: Colors.purpleAccent.withOpacity(0.2),
+                      onChanged: (v) => provider.setCubeOpacity(v),
+                    ),
+                  ],
+                  Divider(color: Colors.white.withOpacity(0.1), height: 16),
+                  Text('不透明度 ${(provider.hudOpacity * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 11)),
                   Slider(
-                    value: provider.cubeOpacity,
-                    min: 0.0,
+                    value: provider.hudOpacity,
+                    min: 0.3,
                     max: 1.0,
+                    divisions: 14,
+                    activeColor: Colors.cyanAccent,
+                    inactiveColor: Colors.cyanAccent.withOpacity(0.2),
+                    onChanged: (v) => provider.setHudOpacity(v),
+                  ),
+                  SizedBox(height: 4),
+                  Text('缩放 ${(provider.hudScale * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                  Slider(
+                    value: provider.hudScale,
+                    min: 0.5,
+                    max: 1.5,
                     divisions: 20,
                     activeColor: Colors.purpleAccent,
                     inactiveColor: Colors.purpleAccent.withOpacity(0.2),
-                    onChanged: (v) => provider.setCubeOpacity(v),
+                    onChanged: (v) => provider.setHudScale(v),
                   ),
                 ],
-                Divider(color: Colors.white.withOpacity(0.1), height: 16),
-                Text('不透明度 ${(provider.hudOpacity * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                Slider(
-                  value: provider.hudOpacity,
-                  min: 0.3,
-                  max: 1.0,
-                  divisions: 14,
-                  activeColor: Colors.cyanAccent,
-                  inactiveColor: Colors.cyanAccent.withOpacity(0.2),
-                  onChanged: (v) => provider.setHudOpacity(v),
-                ),
-                SizedBox(height: 4),
-                Text('缩放 ${(provider.hudScale * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                Slider(
-                  value: provider.hudScale,
-                  min: 0.5,
-                  max: 1.5,
-                  divisions: 20,
-                  activeColor: Colors.purpleAccent,
-                  inactiveColor: Colors.purpleAccent.withOpacity(0.2),
-                  onChanged: (v) => provider.setHudScale(v),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -450,18 +466,8 @@ class _MainScreenState extends State<MainScreen> {
               },
             ),
             SizedBox(height: 8),
-            // Emotions
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              alignment: WrapAlignment.end,
-              children: [
-                _buildMiniIcon(Icons.sentiment_neutral, 'neutral', provider),
-                _buildMiniIcon(Icons.sentiment_very_satisfied, 'happy', provider),
-                _buildMiniIcon(Icons.sentiment_satisfied, 'cool', provider),
-                _buildMiniIcon(Icons.bedtime, 'sleepy', provider),
-              ],
-            ),
+            // Emotions expandable panel
+            _buildEmotionPanel(provider),
             SizedBox(height: 8),
             // Light toggle
             _buildModeButton(
@@ -483,18 +489,123 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildMiniIcon(IconData icon, String emotion, RobotProvider provider) {
+  Widget _buildEmotionPanel(RobotProvider provider) {
+    final emotions = [
+      {'name': 'neutral', 'icon': Icons.sentiment_neutral, 'label': '平静'},
+      {'name': 'happy', 'icon': Icons.sentiment_very_satisfied, 'label': '开心'},
+      {'name': 'sad', 'icon': Icons.sentiment_dissatisfied, 'label': '难过'},
+      {'name': 'angry', 'icon': Icons.sentiment_very_dissatisfied, 'label': '生气'},
+      {'name': 'surprised', 'icon': Icons.sentiment_neutral, 'label': '惊讶'},
+      {'name': 'sleepy', 'icon': Icons.bedtime, 'label': '困倦'},
+      {'name': 'love', 'icon': Icons.favorite, 'label': '爱心'},
+      {'name': 'cool', 'icon': Icons.sentiment_satisfied, 'label': '酷'},
+    ];
+
+    final expanded = provider.emotionExpanded;
+    final current = provider.state['emotion'] as String? ?? 'neutral';
+    final currentEmotion = emotions.firstWhere(
+      (e) => e['name'] == current,
+      orElse: () => emotions.first,
+    );
+
     return GestureDetector(
-      onTap: () => provider.setDisplayEmotion(emotion),
-      child: Container(
-        width: 32,
-        height: 32,
+      onTap: () => provider.setEmotionExpanded(!expanded),
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
           color: Colors.purpleAccent.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: Colors.purpleAccent.withOpacity(0.4)),
         ),
-        child: Icon(icon, color: Colors.purpleAccent, size: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            // Header row: current emotion + expand arrow
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  expanded ? Icons.expand_less : Icons.expand_more,
+                  color: Colors.purpleAccent,
+                  size: 14,
+                ),
+                SizedBox(width: 4),
+                Text(
+                  '表情',
+                  style: TextStyle(color: Colors.purpleAccent, fontSize: 11),
+                ),
+                SizedBox(width: 6),
+                _buildMiniIcon(
+                  currentEmotion['icon'] as IconData,
+                  current,
+                  provider,
+                  isHeader: true,
+                ),
+              ],
+            ),
+            // Expandable emotion grid
+            AnimatedSize(
+              duration: Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              child: expanded
+                  ? Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        alignment: WrapAlignment.end,
+                        children: emotions.map((e) {
+                          final name = e['name'] as String;
+                          final icon = e['icon'] as IconData;
+                          final isCurrent = name == current;
+                          return GestureDetector(
+                            onTap: () {
+                              provider.setDisplayEmotion(name);
+                              provider.setEmotionExpanded(false);
+                            },
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: isCurrent
+                                    ? Colors.purpleAccent.withOpacity(0.4)
+                                    : Colors.purpleAccent.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isCurrent
+                                      ? Colors.purpleAccent
+                                      : Colors.purpleAccent.withOpacity(0.4),
+                                ),
+                              ),
+                              child: Icon(icon, color: Colors.purpleAccent, size: 16),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    )
+                  : SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMiniIcon(IconData icon, String emotion, RobotProvider provider, {bool isHeader = false}) {
+    return GestureDetector(
+      onTap: isHeader ? null : () => provider.setDisplayEmotion(emotion),
+      child: Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          color: Colors.purpleAccent.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.purpleAccent.withOpacity(0.4)),
+        ),
+        child: Icon(icon, color: Colors.purpleAccent, size: 14),
       ),
     );
   }

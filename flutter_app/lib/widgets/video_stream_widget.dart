@@ -39,6 +39,8 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
     final w = provider.cameraWidth;
     final h = provider.cameraHeight;
     final streamUrl = 'http://$ip:5000/video_feed?w=$w&h=$h';
+    final screenW = provider.screenWidth;
+    final screenH = provider.screenHeight;
 
     if (widget.fullscreen) {
       return Stack(
@@ -79,19 +81,19 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
               ),
             ),
           ),
-          // ── Motor detailed HUD (bottom-left) ──
+          // ── Motor draggable HUD ──
           if (provider.showMotorHud)
-            _buildMotorHudOverlay(provider),
+            _buildDraggableMotorHud(provider, screenW, screenH),
 
-          // ── IMU detailed HUD (bottom-right) ──
+          // ── IMU draggable HUD ──
           if (provider.showImuHud)
-            _buildImuHudOverlay(provider),
+            _buildDraggableImuHud(provider, screenW, screenH),
 
           // ── 3D Cube overlay (center-right) ──
           if (provider.showCube3D)
             Positioned(
               right: 20,
-              top: MediaQuery.of(context).size.height / 2 - 60,
+              top: screenH > 0 ? screenH / 2 - 60 : 180,
               child: Cube3DWidget(size: 100),
             ),
         ],
@@ -207,38 +209,165 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
     );
   }
 
-  Widget _buildMotorHudOverlay(RobotProvider provider) {
-    final m1 = provider.state['motor1'] as Map<String, dynamic>? ?? {};
-    final m2 = provider.state['motor2'] as Map<String, dynamic>? ?? {};
+  // ===================== Draggable Motor HUD =====================
+  Widget _buildDraggableMotorHud(RobotProvider provider, double screenW, double screenH) {
+    final left = provider.motorHudX * screenW;
+    final top = provider.motorHudY * screenH;
+    final locked = provider.motorHudLocked;
 
     return Positioned(
-      left: 16,
-      bottom: 20,
-      child: Container(
-        padding: EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.6),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'MOTOR',
-              style: TextStyle(
-                color: Colors.cyanAccent,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2,
-              ),
+      left: left,
+      top: top,
+      child: GestureDetector(
+        onPanUpdate: locked
+            ? null
+            : (details) {
+                final newX = (left + details.delta.dx) / screenW;
+                final newY = (top + details.delta.dy) / screenH;
+                provider.setMotorHudPos(newX.clamp(0.0, 0.9), newY.clamp(0.0, 0.85));
+              },
+        onLongPress: () {
+          provider.setMotorHudLocked(!locked);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(locked ? '电机HUD已解锁，可拖拽' : '电机HUD已锁定'),
+              duration: Duration(seconds: 1),
+              backgroundColor: locked ? Colors.green : Colors.orange,
             ),
-            SizedBox(height: 6),
-            _buildMotorRow('M1', m1),
-            SizedBox(height: 4),
-            _buildMotorRow('M2', m2),
-          ],
+          );
+        },
+        child: Container(
+          padding: EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: locked
+                  ? Colors.cyanAccent.withOpacity(0.3)
+                  : Colors.yellowAccent.withOpacity(0.6),
+              width: locked ? 1 : 2,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    locked ? Icons.lock_outline : Icons.lock_open,
+                    color: locked ? Colors.cyanAccent : Colors.yellowAccent,
+                    size: 10,
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'MOTOR',
+                    style: TextStyle(
+                      color: Colors.cyanAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  if (!locked) ...[
+                    SizedBox(width: 6),
+                    Text(
+                      '拖拽中',
+                      style: TextStyle(color: Colors.yellowAccent, fontSize: 9),
+                    ),
+                  ],
+                ],
+              ),
+              SizedBox(height: 6),
+              _buildMotorRow('M1', provider.state['motor1'] as Map<String, dynamic>? ?? {}),
+              SizedBox(height: 4),
+              _buildMotorRow('M2', provider.state['motor2'] as Map<String, dynamic>? ?? {}),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ===================== Draggable IMU HUD =====================
+  Widget _buildDraggableImuHud(RobotProvider provider, double screenW, double screenH) {
+    final left = provider.imuHudX * screenW;
+    final top = provider.imuHudY * screenH;
+    final locked = provider.imuHudLocked;
+
+    return Positioned(
+      left: left,
+      top: top,
+      child: GestureDetector(
+        onPanUpdate: locked
+            ? null
+            : (details) {
+                final newX = (left + details.delta.dx) / screenW;
+                final newY = (top + details.delta.dy) / screenH;
+                provider.setImuHudPos(newX.clamp(0.0, 0.9), newY.clamp(0.0, 0.85));
+              },
+        onLongPress: () {
+          provider.setImuHudLocked(!locked);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(locked ? 'IMU HUD已解锁，可拖拽' : 'IMU HUD已锁定'),
+              duration: Duration(seconds: 1),
+              backgroundColor: locked ? Colors.green : Colors.orange,
+            ),
+          );
+        },
+        child: Container(
+          padding: EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: locked
+                  ? Colors.purpleAccent.withOpacity(0.3)
+                  : Colors.yellowAccent.withOpacity(0.6),
+              width: locked ? 1 : 2,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    locked ? Icons.lock_outline : Icons.lock_open,
+                    color: locked ? Colors.purpleAccent : Colors.yellowAccent,
+                    size: 10,
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'IMU',
+                    style: TextStyle(
+                      color: Colors.purpleAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  if (!locked) ...[
+                    SizedBox(width: 6),
+                    Text(
+                      '拖拽中',
+                      style: TextStyle(color: Colors.yellowAccent, fontSize: 9),
+                    ),
+                  ],
+                ],
+              ),
+              SizedBox(height: 6),
+              _buildImuRow('Pitch', provider.state['imu'] as Map<String, dynamic>? ?? {}),
+              SizedBox(height: 3),
+              _buildImuRow('Roll', provider.state['imu'] as Map<String, dynamic>? ?? {}),
+              SizedBox(height: 3),
+              _buildImuRow('Yaw', provider.state['imu'] as Map<String, dynamic>? ?? {}),
+            ],
+          ),
         ),
       ),
     );
@@ -298,48 +427,20 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
     );
   }
 
-  Widget _buildImuHudOverlay(RobotProvider provider) {
-    final imu = provider.state['imu'] as Map<String, dynamic>? ?? {};
-    final pitch = (imu['pitch'] as num?)?.toDouble() ?? 0;
-    final roll = (imu['roll'] as num?)?.toDouble() ?? 0;
-    final yaw = (imu['yaw'] as num?)?.toDouble() ?? 0;
+  Widget _buildImuRow(String label, Map<String, dynamic> data) {
+    final value = switch (label) {
+      'Pitch' => (data['pitch'] as num?)?.toDouble() ?? 0,
+      'Roll' => (data['roll'] as num?)?.toDouble() ?? 0,
+      'Yaw' => (data['yaw'] as num?)?.toDouble() ?? 0,
+      _ => 0.0,
+    };
+    final color = switch (label) {
+      'Pitch' => Colors.redAccent,
+      'Roll' => Colors.greenAccent,
+      'Yaw' => Colors.orangeAccent,
+      _ => Colors.white,
+    };
 
-    return Positioned(
-      right: 16,
-      bottom: 20,
-      child: Container(
-        padding: EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.6),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.purpleAccent.withOpacity(0.3)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'IMU',
-              style: TextStyle(
-                color: Colors.purpleAccent,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2,
-              ),
-            ),
-            SizedBox(height: 6),
-            _buildImuRow('Pitch', pitch, Colors.redAccent),
-            SizedBox(height: 3),
-            _buildImuRow('Roll', roll, Colors.greenAccent),
-            SizedBox(height: 3),
-            _buildImuRow('Yaw', yaw, Colors.orangeAccent),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildImuRow(String label, double value, Color color) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -375,11 +476,15 @@ class ResolutionPicker extends StatelessWidget {
     final presets = provider.cameraPresets;
     final currentW = provider.cameraWidth;
     final currentH = provider.cameraHeight;
+    final screenW = provider.screenWidth;
 
     final currentValue = presets.firstWhere(
       (p) => p['width'] == currentW && p['height'] == currentH,
       orElse: () => {'width': currentW, 'height': currentH, 'fps': 0},
     );
+
+    // Adaptive width: wider on large screens, 70% on small screens
+    final pickerWidth = screenW > 500 ? 260.0 : screenW * 0.7;
 
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -388,63 +493,69 @@ class ResolutionPicker extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: Colors.cyanAccent.withOpacity(0.5)),
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<Map<String, dynamic>>(
-          value: currentValue,
-          isDense: true,
-          icon: Icon(Icons.arrow_drop_down, color: Colors.white70, size: 14),
-          dropdownColor: Colors.black.withOpacity(0.92),
-          borderRadius: BorderRadius.circular(10),
-          items: presets.map((p) {
-            final w = p['width'] as int;
-            final h = p['height'] as int;
-            final fps = p['fps'] as int? ?? 0;
-            final isCurrent = w == currentW && h == currentH;
-            return DropdownMenuItem<Map<String, dynamic>>(
-              value: p,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (isCurrent)
-                    Icon(Icons.check, color: Colors.cyanAccent, size: 14)
-                  else
-                    SizedBox(width: 14),
-                  SizedBox(width: 6),
-                  Text(
-                    '$w × $h ${fps > 0 ? "@${fps}FPS" : ""}',
-                    style: TextStyle(
-                      color: isCurrent ? Colors.cyanAccent : Colors.white70,
-                      fontSize: 13,
-                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-          selectedItemBuilder: (_) => presets.map((p) {
-            final w = p['width'] as int;
-            final h = p['height'] as int;
-            return Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.videocam, color: Colors.cyanAccent, size: 12),
-                SizedBox(width: 4),
-                Text(
-                  '$w×$h',
-                  style: TextStyle(color: Colors.white, fontSize: 11),
-                ),
-              ],
-            );
-          }).toList(),
-          onChanged: (p) {
-            if (p != null) {
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minWidth: 140, maxWidth: pickerWidth),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<Map<String, dynamic>>(
+            value: currentValue,
+            isDense: true,
+            icon: Icon(Icons.arrow_drop_down, color: Colors.white70, size: 14),
+            dropdownColor: Colors.black.withOpacity(0.92),
+            borderRadius: BorderRadius.circular(10),
+            items: presets.map((p) {
               final w = p['width'] as int;
               final h = p['height'] as int;
               final fps = p['fps'] as int? ?? 0;
-              provider.setCameraResolution(w, h, fps: fps > 0 ? fps : null);
-            }
-          },
+              final isCurrent = w == currentW && h == currentH;
+              return DropdownMenuItem<Map<String, dynamic>>(
+                value: p,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isCurrent)
+                      Icon(Icons.check, color: Colors.cyanAccent, size: 14)
+                    else
+                      SizedBox(width: 14),
+                    SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        '$w × $h ${fps > 0 ? "@${fps}FPS" : ""}',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isCurrent ? Colors.cyanAccent : Colors.white70,
+                          fontSize: 13,
+                          fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+            selectedItemBuilder: (_) => presets.map((p) {
+              final w = p['width'] as int;
+              final h = p['height'] as int;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.videocam, color: Colors.cyanAccent, size: 12),
+                  SizedBox(width: 4),
+                  Text(
+                    '$w×$h',
+                    style: TextStyle(color: Colors.white, fontSize: 11),
+                  ),
+                ],
+              );
+            }).toList(),
+            onChanged: (p) {
+              if (p != null) {
+                final w = p['width'] as int;
+                final h = p['height'] as int;
+                final fps = p['fps'] as int? ?? 0;
+                provider.setCameraResolution(w, h, fps: fps > 0 ? fps : null);
+              }
+            },
+          ),
         ),
       ),
     );
