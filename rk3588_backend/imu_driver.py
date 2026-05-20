@@ -122,6 +122,63 @@ class YbImuDriver:
         if callback in self._callbacks:
             self._callbacks.remove(callback)
 
+    # ── Calibration API (wraps YbImuSerialLib) ──
+    def get_version(self) -> Optional[str]:
+        """Get IMU firmware version string like V1.0.0"""
+        if not self._connected or self._imu is None:
+            return None
+        try:
+            return self._imu.get_version()
+        except Exception as e:
+            print(f"[IMU] get_version error: {e}")
+            return None
+
+    def calibrate_imu(self) -> dict:
+        """Calibrate accelerometer + gyroscope. Takes ~7 seconds."""
+        if not self._connected or self._imu is None:
+            return {"success": False, "error": "IMU not connected"}
+        try:
+            print("[IMU] Starting accelerometer + gyroscope calibration (keep still for ~7s)...")
+            result = self._imu.calibration_imu()
+            return {"success": True, "type": "imu", "result": result}
+        except Exception as e:
+            return {"success": False, "type": "imu", "error": str(e)}
+
+    def calibrate_mag(self) -> dict:
+        """Calibrate magnetometer. Requires rotating the device in all axes."""
+        if not self._connected or self._imu is None:
+            return {"success": False, "error": "IMU not connected"}
+        try:
+            print("[IMU] Starting magnetometer calibration — rotate device in all axes...")
+            result = self._imu.calibration_mag()
+            return {"success": True, "type": "mag", "result": result}
+        except Exception as e:
+            return {"success": False, "type": "mag", "error": str(e)}
+
+    def calibrate_temperature(self, now_temperature: float) -> dict:
+        """Calibrate temperature compensation. Provide current ambient temp in °C."""
+        if not self._connected or self._imu is None:
+            return {"success": False, "error": "IMU not connected"}
+        try:
+            if now_temperature > 50.0 or now_temperature < -50.0:
+                return {"success": False, "error": "Temperature out of range (-50~50°C)"}
+            print(f"[IMU] Starting temperature calibration at {now_temperature}°C...")
+            result = self._imu.calibration_temperature(now_temperature)
+            return {"success": True, "type": "temp", "temperature": now_temperature, "result": result}
+        except Exception as e:
+            return {"success": False, "type": "temp", "error": str(e)}
+
+    def reset_user_data(self) -> dict:
+        """Reset all calibration data to factory defaults."""
+        if not self._connected or self._imu is None:
+            return {"success": False, "error": "IMU not connected"}
+        try:
+            print("[IMU] Resetting all user calibration data to factory defaults...")
+            self._imu.reset_user_data()
+            return {"success": True, "type": "reset", "message": "User data reset. Re-calibration recommended."}
+        except Exception as e:
+            return {"success": False, "type": "reset", "error": str(e)}
+
 
 # ============ Standalone Test ============
 if __name__ == "__main__":

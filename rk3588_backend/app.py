@@ -14,6 +14,7 @@ import random
 import os
 import subprocess
 import numpy as np
+from typing import Optional
 
 camera_lock = threading.Lock()
 
@@ -376,6 +377,63 @@ def get_imu():
         state = imu_driver.get_state()
         return jsonify({"success": True, "data": state})
     return jsonify({"success": False, "error": "IMU not connected", "data": robot_state["imu"]}), 503
+
+# ---- IMU Calibration ----
+imu_calibration_thread: Optional[threading.Thread] = None
+imu_calibration_result: Optional[dict] = None
+
+@app.route('/api/imu/calibrate', methods=['POST'])
+def imu_calibrate():
+    """Calibrate IMU: type=imu|mag|temp|reset, temperature for temp type"""
+    global imu_calibration_thread, imu_calibration_result
+    if not imu_connected:
+        return jsonify({"success": False, "error": "IMU not connected"}), 503
+
+    data = request.json or {}
+    cal_type = data.get('type', 'imu')
+
+    def _do_calibrate():
+        global imu_calibration_result
+        if cal_type == 'imu':
+            imu_calibration_result = imu_driver.calibrate_imu()
+        elif cal_type == 'mag':
+            imu_calibration_result = imu_driver.calibrate_mag()
+        elif cal_type == 'temp':
+            temp = data.get('temperature', 25.0)
+            imu_calibration_result = imu_driver.calibrate_temperature(temp)
+        elif cal_type == 'reset':
+            imu_calibration_result = imu_driver.reset_user_data()
+        else:
+            imu_calibration_result = {"success": False, "error": f"Unknown calibration type: {cal_type}"}
+
+    # Run calibration in background thread (some take 7+ seconds)
+    if imu_calibration_thread is not None and imu_calibration_thread.is_alive():
+        return jsonify({"success": False, "error": "Another calibration is already running"}), 409
+
+    imu_calibration_result = None
+    imu_calibration_thread = threading.Thread(target=_do_calibrate, daemon=True)
+    imu_calibration_thread.start()
+
+    return jsonify({"success": True, "type": cal_type, "message": "Calibration started", "status": "running"})
+
+@app.route('/api/imu/calibrate/status', methods=['GET'])
+def imu_calibrate_status():
+    """Check ongoing calibration status and result"""
+    global imu_calibration_thread, imu_calibration_result
+    running = imu_calibration_thread is not None and imu_calibration_thread.is_alive()
+    return jsonify({
+        "success": True,
+        "running": running,
+        "result": imu_calibration_result,
+    })
+
+@app.route('/api/imu/version', methods=['GET'])
+def imu_version():
+    """Get IMU firmware version"""
+    if not imu_connected:
+        return jsonify({"success": False, "error": "IMU not connected"}), 503
+    version = imu_driver.get_version()
+    return jsonify({"success": True, "version": version})
 
 # ---- Tracking Data ----
 @app.route('/api/tracking', methods=['GET'])
@@ -752,6 +810,9 @@ if __name__ == '__main__':
     print("  POST /api/mode             - Mode switch")
     print("  POST /api/servo            - Servo steering")
     print("  GET  /api/imu              - IMU data")
+    print("  POST /api/imu/calibrate    - IMU calibration")
+    print("  GET  /api/imu/calibrate/status - Calibration status")
+    print("  GET  /api/imu/version      - IMU firmware version")
     print("  GET  /api/tracking         - Line tracking data")
     print("  POST /api/display/emotion  - Face display emotion")
     print("  POST /api/ssh/start        - One-click start backend")
