@@ -138,7 +138,11 @@ class _MainScreenState extends State<MainScreen> {
 
           // === HUD Settings overlay (LAST = true topmost layer) ===
           if (_showControls && _showHudSettings)
-            _buildHudSettingsOverlay(provider, screenW, screenH),
+            Transform.scale(
+              scale: provider.hudScale,
+              alignment: Alignment.topRight,
+              child: _buildHudSettingsOverlay(provider, screenW, screenH),
+            ),
         ],
       ),
     );

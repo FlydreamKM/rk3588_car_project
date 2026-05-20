@@ -87,11 +87,11 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
           // ── IMU detailed HUD (bottom-right) ──
           if (provider.showImuHud)
             _buildImuHudOverlay(provider, context),
-          // ── 3D Cube overlay (center-right) ──
+          // ── 3D Cube overlay (center) ──
           if (provider.showCube3D)
             Positioned(
-              right: 20,
-              top: MediaQuery.of(context).size.height / 2 - 60,
+              left: MediaQuery.of(context).size.width / 2 - 50,
+              top: MediaQuery.of(context).size.height / 2 - 50,
               child: Cube3DWidget(size: 100),
             ),
         ],

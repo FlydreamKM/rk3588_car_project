@@ -43,12 +43,12 @@ class RobotProvider extends ChangeNotifier {
 
   // Draggable HUD positions (persisted as ratio 0.0-1.0)
   // Default values approximate v57 fixed positions: motor bottom-left, imu bottom-right
-  double _motorHudX = 0.02;  // left ratio
-  double _motorHudY = 0.88;  // top ratio
-  double _imuHudX = 0.82;    // left ratio
-  double _imuHudY = 0.88;    // top ratio
-  bool _motorHudLocked = true;
-  bool _imuHudLocked = true;
+  double _motorHudX = 0.20;  // left ratio (center-ish)
+  double _motorHudY = 0.35;  // top ratio (center-ish)
+  double _imuHudX = 0.60;    // left ratio (center-ish)
+  double _imuHudY = 0.35;    // top ratio (center-ish)
+  bool _motorHudLocked = false; // default unlocked (draggable)
+  bool _imuHudLocked = false;   // default unlocked (draggable)
 
   // Camera settings
   int _cameraWidth = 640;
@@ -120,12 +120,12 @@ class RobotProvider extends ChangeNotifier {
       _emotionExpanded = prefs.getBool(_prefEmotionExpanded) ?? false;
       // Draggable HUD positions (persisted as ratio 0.0-1.0)
       // Default values approximate v57 fixed positions: motor bottom-left, imu bottom-right
-      _motorHudX = (prefs.getDouble(_prefMotorHudX) ?? 0.02).clamp(0.0, 0.9);
-      _motorHudY = (prefs.getDouble(_prefMotorHudY) ?? 0.88).clamp(0.0, 0.9);
-      _imuHudX = (prefs.getDouble(_prefImuHudX) ?? 0.82).clamp(0.0, 0.9);
-      _imuHudY = (prefs.getDouble(_prefImuHudY) ?? 0.88).clamp(0.0, 0.9);
-      _motorHudLocked = prefs.getBool(_prefMotorHudLocked) ?? true;
-      _imuHudLocked = prefs.getBool(_prefImuHudLocked) ?? true;
+      _motorHudX = (prefs.getDouble(_prefMotorHudX) ?? 0.20).clamp(0.0, 0.9);
+      _motorHudY = (prefs.getDouble(_prefMotorHudY) ?? 0.35).clamp(0.0, 0.9);
+      _imuHudX = (prefs.getDouble(_prefImuHudX) ?? 0.60).clamp(0.0, 0.9);
+      _imuHudY = (prefs.getDouble(_prefImuHudY) ?? 0.35).clamp(0.0, 0.9);
+      _motorHudLocked = prefs.getBool(_prefMotorHudLocked) ?? false;
+      _imuHudLocked = prefs.getBool(_prefImuHudLocked) ?? false;
       notifyListeners();
     } catch (e) {
       debugPrint('Load saved settings error: $e');
