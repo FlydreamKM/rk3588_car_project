@@ -100,14 +100,13 @@ class CuteFaceDisplay:
             is_x11 = os.environ.get('SDL_VIDEODRIVER') == 'x11' or bool(os.environ.get('DISPLAY'))
             
             if is_x11:
-                # On KDE Plasma / desktop: FULLSCREEN to cover entire display
-                # This avoids the NOFRAME window being hidden by desktop compositor
+                # On KDE Plasma / desktop: FULLSCREEN + NOFRAME to cover display, software render to avoid GL conflict with KWin
                 os.environ['SDL_VIDEO_WINDOW_POS'] = '0,0'
                 os.environ['SDL_VIDEO_CENTERED'] = '0'
-                print(f"[FaceDisplay] Creating X11 fullscreen window {self.WIDTH}x{self.HEIGHT}")
+                print(f"[FaceDisplay] Creating X11 fullscreen window {self.WIDTH}x{self.HEIGHT} (software render)")
                 self.screen = pygame.display.set_mode(
                     (self.WIDTH, self.HEIGHT),
-                    pygame.FULLSCREEN | pygame.DOUBLEBUF
+                    pygame.FULLSCREEN | pygame.NOFRAME
                 )
                 print("[FaceDisplay] X11 fullscreen surface created OK")
             else:
