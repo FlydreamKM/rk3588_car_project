@@ -33,7 +33,7 @@ motor_connected = False
 
 # ===================== Servo Driver =====================
 # OrangePi 5: try pwmchip4 first, fallback to 0
-SERVO_PWM_CHIP = int(os.environ.get('SERVO_PWM_CHIP', '4'))
+SERVO_PWM_CHIP = int(os.environ.get('SERVO_PWM_CHIP', '0'))
 servo_driver = ServoDriver(chip=SERVO_PWM_CHIP)
 servo_connected = servo_driver.init()
 
