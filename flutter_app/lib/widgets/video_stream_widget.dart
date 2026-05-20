@@ -20,6 +20,8 @@ class VideoStreamWidget extends StatefulWidget {
 
 class _VideoStreamWidgetState extends State<VideoStreamWidget> {
   String _streamUrl = '';
+  Offset _cubeOffset = Offset.zero;
+  bool _cubeInitialized = false;
 
   @override
   void didChangeDependencies() {
@@ -87,12 +89,34 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
           // ── IMU detailed HUD (bottom-right) ──
           if (provider.showImuHud)
             _buildImuHudOverlay(provider, context),
-          // ── 3D Cube overlay (center) ──
+          // ── 3D Cube overlay (center, draggable) ──
           if (provider.showCube3D)
-            Positioned(
-              left: MediaQuery.of(context).size.width / 2 - 50,
-              top: MediaQuery.of(context).size.height / 2 - 50,
-              child: Cube3DWidget(size: 100),
+            Builder(
+              builder: (context) {
+                final screenSize = MediaQuery.of(context).size;
+                if (!_cubeInitialized) {
+                  _cubeOffset = Offset(
+                    screenSize.width / 2 - 50,
+                    screenSize.height / 2 - 50,
+                  );
+                  _cubeInitialized = true;
+                }
+                return Positioned(
+                  left: _cubeOffset.dx,
+                  top: _cubeOffset.dy,
+                  child: GestureDetector(
+                    onPanUpdate: (details) {
+                      setState(() {
+                        _cubeOffset = Offset(
+                          _cubeOffset.dx + details.delta.dx,
+                          _cubeOffset.dy + details.delta.dy,
+                        );
+                      });
+                    },
+                    child: Cube3DWidget(size: 100),
+                  ),
+                );
+              },
             ),
         ],
       );

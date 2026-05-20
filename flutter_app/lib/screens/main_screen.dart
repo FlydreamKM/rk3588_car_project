@@ -16,6 +16,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   bool _showControls = true;
   bool _showHudSettings = false;
+  bool _showEmotions = false;
 
   @override
   void initState() {
@@ -138,10 +139,14 @@ class _MainScreenState extends State<MainScreen> {
 
           // === HUD Settings overlay (LAST = true topmost layer) ===
           if (_showControls && _showHudSettings)
-            Transform.scale(
-              scale: provider.hudScale,
-              alignment: Alignment.topRight,
-              child: _buildHudSettingsOverlay(provider, screenW, screenH),
+            Positioned(
+              top: 56,
+              right: 12,
+              child: Transform.scale(
+                scale: provider.hudScale,
+                alignment: Alignment.topRight,
+                child: _buildHudSettingsPanel(provider, screenW, screenH),
+              ),
             ),
         ],
       ),
@@ -248,25 +253,25 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildHudSettingsOverlay(RobotProvider provider, double screenW, double screenH) {
+  Widget _buildHudSettingsPanel(RobotProvider provider, double screenW, double screenH) {
     final panelW = (screenW > 0 && screenW < 500) ? screenW * 0.85 : 260.0;
     final maxH = screenH > 0 ? screenH * 0.75 : 300.0;
 
-    return Positioned(
-      top: 56,
-      right: 12,
-      child: Container(
-        width: panelW,
-        height: maxH,
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.85),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.cyanAccent.withOpacity(0.4), width: 2),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: ListView(
-            padding: EdgeInsets.all(16),
+    return Container(
+      width: panelW,
+      height: maxH,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.90),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.cyanAccent.withOpacity(0.5), width: 2),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('HUD 设置', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
               SizedBox(height: 12),
@@ -421,6 +426,16 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildRightPanel(BuildContext context, RobotProvider provider) {
     final isTrackMode = provider.mode == 'track';
+    final emotions = [
+      (Icons.sentiment_neutral, 'neutral', Colors.purpleAccent),
+      (Icons.sentiment_very_satisfied, 'happy', Colors.greenAccent),
+      (Icons.sentiment_dissatisfied, 'sad', Colors.blueAccent),
+      (Icons.sentiment_very_dissatisfied, 'angry', Colors.redAccent),
+      (Icons.sentiment_satisfied, 'surprised', Colors.orangeAccent),
+      (Icons.bedtime, 'sleepy', Colors.indigoAccent),
+      (Icons.favorite, 'love', Colors.pinkAccent),
+      (Icons.sentiment_satisfied_alt, 'cool', Colors.cyanAccent),
+    ];
 
     return GlassContainer(
       gradient: LinearGradient(
@@ -452,17 +467,42 @@ class _MainScreenState extends State<MainScreen> {
               },
             ),
             SizedBox(height: 8),
-            // Emotions
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              alignment: WrapAlignment.end,
-              children: [
-                _buildMiniIcon(Icons.sentiment_neutral, 'neutral', provider),
-                _buildMiniIcon(Icons.sentiment_very_satisfied, 'happy', provider),
-                _buildMiniIcon(Icons.sentiment_satisfied, 'cool', provider),
-                _buildMiniIcon(Icons.bedtime, 'sleepy', provider),
-              ],
+            // Emotion toggle button
+            GestureDetector(
+              onTap: () => setState(() => _showEmotions = !_showEmotions),
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.purpleAccent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.purpleAccent.withOpacity(0.4)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.emoji_emotions, color: Colors.purpleAccent, size: 14),
+                    SizedBox(width: 4),
+                    Text(
+                      _showEmotions ? '收起' : '表情',
+                      style: TextStyle(color: Colors.white70, fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(height: 6),
+            // Animated emotion selector
+            AnimatedCrossFade(
+              duration: Duration(milliseconds: 300),
+              firstChild: SizedBox.shrink(),
+              secondChild: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                alignment: WrapAlignment.end,
+                children: emotions.map((e) => _buildMiniIcon(e.$1, e.$2, provider, e.$3)).toList(),
+              ),
+              crossFadeState: _showEmotions ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+              sizeCurve: Curves.easeInOut,
             ),
             SizedBox(height: 8),
             // Light toggle
@@ -485,18 +525,18 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildMiniIcon(IconData icon, String emotion, RobotProvider provider) {
+  Widget _buildMiniIcon(IconData icon, String emotion, RobotProvider provider, Color color) {
     return GestureDetector(
       onTap: () => provider.setDisplayEmotion(emotion),
       child: Container(
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: Colors.purpleAccent.withOpacity(0.15),
+          color: color.withOpacity(0.15),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.purpleAccent.withOpacity(0.4)),
+          border: Border.all(color: color.withOpacity(0.4)),
         ),
-        child: Icon(icon, color: Colors.purpleAccent, size: 16),
+        child: Icon(icon, color: color, size: 16),
       ),
     );
   }
