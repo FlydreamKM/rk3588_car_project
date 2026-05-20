@@ -459,6 +459,47 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
       ],
     );
   }
+
+  // ── Draggable 3D Cube (screen-bounded) ──
+  Widget _buildDraggableCube(BuildContext context, RobotProvider provider) {
+    final screenSize = MediaQuery.of(context).size;
+    const cubeSize = 100.0;
+    // Initialize center if first show
+    if (!_cubeInitialized) {
+      _cubeOffset = Offset(
+        (screenSize.width - cubeSize) / 2,
+        (screenSize.height - cubeSize) / 2,
+      );
+      _cubeInitialized = true;
+    }
+    // Clamp to keep fully on-screen
+    _cubeOffset = Offset(
+      _cubeOffset.dx.clamp(0.0, screenSize.width - cubeSize),
+      _cubeOffset.dy.clamp(0.0, screenSize.height - cubeSize),
+    );
+
+    return Positioned(
+      left: _cubeOffset.dx,
+      top: _cubeOffset.dy,
+      child: GestureDetector(
+        onPanUpdate: (details) {
+          setState(() {
+            final newX = (_cubeOffset.dx + details.delta.dx)
+                .clamp(0.0, screenSize.width - cubeSize);
+            final newY = (_cubeOffset.dy + details.delta.dy)
+                .clamp(0.0, screenSize.height - cubeSize);
+            _cubeOffset = Offset(newX, newY);
+          });
+        },
+        child: Container(
+          width: cubeSize,
+          height: cubeSize,
+          alignment: Alignment.center,
+          child: Cube3DWidget(size: cubeSize),
+        ),
+      ),
+    );
+  }
 }
 
 class ResolutionPicker extends StatelessWidget {
@@ -548,47 +589,6 @@ class ResolutionPicker extends StatelessWidget {
               }
             },
           ),
-        ),
-      ),
-    );
-  }
-
-  // ── Draggable 3D Cube (screen-bounded) ──
-  Widget _buildDraggableCube(BuildContext context, RobotProvider provider) {
-    final screenSize = MediaQuery.of(context).size;
-    const cubeSize = 100.0;
-    // Initialize center if first show
-    if (!_cubeInitialized) {
-      _cubeOffset = Offset(
-        (screenSize.width - cubeSize) / 2,
-        (screenSize.height - cubeSize) / 2,
-      );
-      _cubeInitialized = true;
-    }
-    // Clamp to keep fully on-screen
-    _cubeOffset = Offset(
-      _cubeOffset.dx.clamp(0.0, screenSize.width - cubeSize),
-      _cubeOffset.dy.clamp(0.0, screenSize.height - cubeSize),
-    );
-
-    return Positioned(
-      left: _cubeOffset.dx,
-      top: _cubeOffset.dy,
-      child: GestureDetector(
-        onPanUpdate: (details) {
-          setState(() {
-            final newX = (_cubeOffset.dx + details.delta.dx)
-                .clamp(0.0, screenSize.width - cubeSize);
-            final newY = (_cubeOffset.dy + details.delta.dy)
-                .clamp(0.0, screenSize.height - cubeSize);
-            _cubeOffset = Offset(newX, newY);
-          });
-        },
-        child: Container(
-          width: cubeSize,
-          height: cubeSize,
-          alignment: Alignment.center,
-          child: Cube3DWidget(size: cubeSize),
         ),
       ),
     );
