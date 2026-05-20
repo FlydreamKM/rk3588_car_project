@@ -42,10 +42,11 @@ class RobotProvider extends ChangeNotifier {
   bool _emotionExpanded = false;
 
   // Draggable HUD positions (persisted as ratio 0.0-1.0)
+  // Default values approximate v57 fixed positions: motor bottom-left, imu bottom-right
   double _motorHudX = 0.02;  // left ratio
-  double _motorHudY = 0.75;  // top ratio
-  double _imuHudX = 0.75;    // left ratio
-  double _imuHudY = 0.75;    // top ratio
+  double _motorHudY = 0.88;  // top ratio
+  double _imuHudX = 0.82;    // left ratio
+  double _imuHudY = 0.88;    // top ratio
   bool _motorHudLocked = true;
   bool _imuHudLocked = true;
 
@@ -117,10 +118,12 @@ class RobotProvider extends ChangeNotifier {
       _showCube3D = prefs.getBool(_prefShowCube3D) ?? true;
       _cubeOpacity = prefs.getDouble(_prefCubeOpacity) ?? 0.5;
       _emotionExpanded = prefs.getBool(_prefEmotionExpanded) ?? false;
-      _motorHudX = prefs.getDouble(_prefMotorHudX) ?? 0.02;
-      _motorHudY = prefs.getDouble(_prefMotorHudY) ?? 0.75;
-      _imuHudX = prefs.getDouble(_prefImuHudX) ?? 0.75;
-      _imuHudY = prefs.getDouble(_prefImuHudY) ?? 0.75;
+      // Draggable HUD positions (persisted as ratio 0.0-1.0)
+      // Default values approximate v57 fixed positions: motor bottom-left, imu bottom-right
+      _motorHudX = (prefs.getDouble(_prefMotorHudX) ?? 0.02).clamp(0.0, 0.9);
+      _motorHudY = (prefs.getDouble(_prefMotorHudY) ?? 0.88).clamp(0.0, 0.9);
+      _imuHudX = (prefs.getDouble(_prefImuHudX) ?? 0.82).clamp(0.0, 0.9);
+      _imuHudY = (prefs.getDouble(_prefImuHudY) ?? 0.88).clamp(0.0, 0.9);
       _motorHudLocked = prefs.getBool(_prefMotorHudLocked) ?? true;
       _imuHudLocked = prefs.getBool(_prefImuHudLocked) ?? true;
       notifyListeners();

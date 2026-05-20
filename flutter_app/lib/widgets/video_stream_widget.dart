@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mjpeg_stream/mjpeg_stream.dart';
 import 'package:provider/provider.dart';
 import '../providers/robot_provider.dart';
+import '../widgets/cube_3d_widget.dart';
 
 class VideoStreamWidget extends StatefulWidget {
   final BoxFit fit;
@@ -80,6 +81,19 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
               ),
             ),
           ),
+          // ── Motor detailed HUD (bottom-left) ──
+          if (provider.showMotorHud)
+            _buildMotorHudOverlay(provider, context),
+          // ── IMU detailed HUD (bottom-right) ──
+          if (provider.showImuHud)
+            _buildImuHudOverlay(provider, context),
+          // ── 3D Cube overlay (center-right) ──
+          if (provider.showCube3D)
+            Positioned(
+              right: 20,
+              top: MediaQuery.of(context).size.height / 2 - 60,
+              child: Cube3DWidget(size: 100),
+            ),
         ],
       );
     }
@@ -220,9 +234,224 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
     );
   }
 
-  String _fmt(dynamic v) {
-    final d = (v as num?)?.toDouble() ?? 0;
-    return d.toStringAsFixed(1);
+  // ── Motor detailed HUD (fullscreen, bottom-left, draggable) ──
+  Widget _buildMotorHudOverlay(RobotProvider provider, BuildContext context) {
+    final m1 = provider.state['motor1'] as Map<String, dynamic>? ?? {};
+    final m2 = provider.state['motor2'] as Map<String, dynamic>? ?? {};
+    final screenW = provider.screenWidth;
+    final screenH = provider.screenHeight;
+    final left = provider.motorHudX * screenW;
+    final top = provider.motorHudY * screenH;
+    final locked = provider.motorHudLocked;
+
+    return Positioned(
+      left: left,
+      top: top,
+      child: GestureDetector(
+        onPanUpdate: locked
+            ? null
+            : (details) {
+                final newX = (left + details.delta.dx) / screenW;
+                final newY = (top + details.delta.dy) / screenH;
+                provider.setMotorHudPos(newX.clamp(0.0, 0.9), newY.clamp(0.0, 0.9));
+              },
+        onLongPress: () {
+          provider.setMotorHudLocked(!locked);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(locked ? '电机HUD已解锁，可拖拽' : '电机HUD已锁定'),
+              duration: Duration(seconds: 1),
+              backgroundColor: locked ? Colors.green : Colors.orange,
+            ),
+          );
+        },
+        child: Container(
+          padding: EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.75),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: locked ? Colors.red.withOpacity(0.5) : Colors.yellow,
+              width: locked ? 1 : 2,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    locked ? Icons.lock_outline : Icons.lock_open,
+                    color: locked ? Colors.red : Colors.yellow,
+                    size: 10,
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'MOTOR',
+                    style: TextStyle(
+                      color: Colors.cyanAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  if (!locked) ...[
+                    SizedBox(width: 6),
+                    Text(
+                      '拖拽中',
+                      style: TextStyle(color: Colors.yellow, fontSize: 9),
+                    ),
+                  ],
+                ],
+              ),
+              SizedBox(height: 6),
+              _buildMotorRow('M1', m1),
+              SizedBox(height: 4),
+              _buildMotorRow('M2', m2),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── IMU detailed HUD (fullscreen, bottom-right, draggable) ──
+  Widget _buildImuHudOverlay(RobotProvider provider, BuildContext context) {
+    final imu = provider.state['imu'] as Map<String, dynamic>? ?? {};
+    final pitch = (imu['pitch'] as num?)?.toDouble() ?? 0;
+    final roll = (imu['roll'] as num?)?.toDouble() ?? 0;
+    final yaw = (imu['yaw'] as num?)?.toDouble() ?? 0;
+    final screenW = provider.screenWidth;
+    final screenH = provider.screenHeight;
+    final left = provider.imuHudX * screenW;
+    final top = provider.imuHudY * screenH;
+    final locked = provider.imuHudLocked;
+
+    return Positioned(
+      left: left,
+      top: top,
+      child: GestureDetector(
+        onPanUpdate: locked
+            ? null
+            : (details) {
+                final newX = (left + details.delta.dx) / screenW;
+                final newY = (top + details.delta.dy) / screenH;
+                provider.setImuHudPos(newX.clamp(0.0, 0.9), newY.clamp(0.0, 0.9));
+              },
+        onLongPress: () {
+          provider.setImuHudLocked(!locked);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(locked ? 'IMU HUD已解锁，可拖拽' : 'IMU HUD已锁定'),
+              duration: Duration(seconds: 1),
+              backgroundColor: locked ? Colors.green : Colors.orange,
+            ),
+          );
+        },
+        child: Container(
+          padding: EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.75),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: locked ? Colors.green.withOpacity(0.5) : Colors.yellow,
+              width: locked ? 1 : 2,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    locked ? Icons.lock_outline : Icons.lock_open,
+                    color: locked ? Colors.green : Colors.yellow,
+                    size: 10,
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'IMU',
+                    style: TextStyle(
+                      color: Colors.greenAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  if (!locked) ...[
+                    SizedBox(width: 6),
+                    Text(
+                      '拖拽中',
+                      style: TextStyle(color: Colors.yellow, fontSize: 9),
+                    ),
+                  ],
+                ],
+              ),
+              SizedBox(height: 6),
+              _buildImuRow('Pitch', pitch, Colors.redAccent),
+              SizedBox(height: 3),
+              _buildImuRow('Roll', roll, Colors.greenAccent),
+              SizedBox(height: 3),
+              _buildImuRow('Yaw', yaw, Colors.orangeAccent),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMotorRow(String label, Map<String, dynamic> data) {
+    final speed = (data['speed'] as num?)?.toDouble() ?? 0;
+    final angle = (data['angle'] as num?)?.toDouble() ?? 0;
+    final pwm = (data['pwm'] as num?)?.toDouble() ?? 0;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 22,
+          child: Text(
+            label,
+            style: TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold),
+          ),
+        ),
+        Text(
+          's=${speed.toStringAsFixed(1).padLeft(6)}  a=${angle.toStringAsFixed(1).padLeft(6)}  pwm=${pwm.toStringAsFixed(1).padLeft(6)}',
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.8),
+            fontSize: 10,
+            fontFamily: 'monospace',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImuRow(String label, double value, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 40,
+          child: Text(
+            label,
+            style: TextStyle(color: color.withOpacity(0.7), fontSize: 10),
+          ),
+        ),
+        Text(
+          '${value.toStringAsFixed(1).padLeft(6)}°',
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.9),
+            fontSize: 10,
+            fontFamily: 'monospace',
+          ),
+        ),
+      ],
+    );
   }
 }
 
