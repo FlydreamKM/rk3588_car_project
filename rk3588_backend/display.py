@@ -28,15 +28,19 @@ def _auto_detect_display():
     if os.environ.get('DISPLAY'):
         os.environ['SDL_VIDEODRIVER'] = 'x11'
         print(f"[FaceDisplay] DISPLAY={os.environ['DISPLAY']} detected, using x11")
-        return
-    # Try to auto-detect active X11 session (e.g., SSH start but KDE already running)
-    for display_num in ['0', '1', '2']:
-        if os.path.exists(f'/tmp/.X11-unix/X{display_num}'):
-            os.environ['DISPLAY'] = f':{display_num}'
-            os.environ['SDL_VIDEODRIVER'] = 'x11'
-            print(f"[FaceDisplay] Auto-detected DISPLAY=:{display_num} from /tmp/.X11-unix/X{display_num}")
-            return
-    if os.path.exists('/dev/dri/card0'):
+    else:
+        # Try to auto-detect active X11 session (e.g., SSH start but KDE already running)
+        for display_num in ['0', '1', '2']:
+            if os.path.exists(f'/tmp/.X11-unix/X{display_num}'):
+                os.environ['DISPLAY'] = f':{display_num}'
+                os.environ['SDL_VIDEODRIVER'] = 'x11'
+                print(f"[FaceDisplay] Auto-detected DISPLAY=:{display_num} from /tmp/.X11-unix/X{display_num}")
+                break
+    if os.environ.get('SDL_VIDEODRIVER') == 'x11':
+        # Bypass KWin compositor to avoid GL context conflict with Mali GPU
+        os.environ['SDL_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR'] = '1'
+        print("[FaceDisplay] Set NET_WM_BYPASS_COMPOSITOR=1 to avoid KWin GL conflict")
+    elif os.path.exists('/dev/dri/card0'):
         os.environ['SDL_VIDEODRIVER'] = 'kmsdrm'
         print("[FaceDisplay] No X11 found, falling back to KMS/DRM")
     else:
@@ -100,15 +104,16 @@ class CuteFaceDisplay:
             is_x11 = os.environ.get('SDL_VIDEODRIVER') == 'x11' or bool(os.environ.get('DISPLAY'))
             
             if is_x11:
-                # On KDE Plasma / desktop: FULLSCREEN + NOFRAME to cover display, software render to avoid GL conflict with KWin
+                # On KDE Plasma / desktop: pure software surface, bypass compositor
+                # NOFRAME only (no FULLSCREEN/DOUBLEBUF/HWSURFACE) to avoid Mali GL conflict with KWin
                 os.environ['SDL_VIDEO_WINDOW_POS'] = '0,0'
                 os.environ['SDL_VIDEO_CENTERED'] = '0'
-                print(f"[FaceDisplay] Creating X11 fullscreen window {self.WIDTH}x{self.HEIGHT} (software render)")
+                print(f"[FaceDisplay] Creating X11 NOFRAME window {self.WIDTH}x{self.HEIGHT} (software render)")
                 self.screen = pygame.display.set_mode(
                     (self.WIDTH, self.HEIGHT),
-                    pygame.FULLSCREEN | pygame.NOFRAME
+                    pygame.NOFRAME
                 )
-                print("[FaceDisplay] X11 fullscreen surface created OK")
+                print("[FaceDisplay] X11 software surface created OK")
             else:
                 # Try KMS/DRM first (best for RK3588S direct HDMI)
                 print("[FaceDisplay] Trying KMS/DRM fullscreen...")
