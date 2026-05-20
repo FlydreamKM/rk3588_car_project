@@ -19,7 +19,7 @@ import sys
 import math
 import threading
 import time
-from typing import Optional
+from typing import Optional, List, Tuple
 
 # Auto-detect display driver
 # If DISPLAY is set, we're on a desktop (KDE/GNOME/X11) -> use x11
@@ -56,22 +56,30 @@ import pygame
 
 class CuteFaceDisplay:
     """
-    800x480 HDMI cute face display.
+    800x480 LED matrix pixel face display.
     Fullscreen animated robot face with blinking and emotion transitions.
+    Sci-fi HUD style: dark blue-black background + cyan glowing pixel dots.
     """
 
     WIDTH = 800
     HEIGHT = 480
     FPS = 30
 
+    # LED Grid config
+    GRID_COLS = 40
+    GRID_ROWS = 24
+    CELL_W = WIDTH / GRID_COLS   # 20
+    CELL_H = HEIGHT / GRID_ROWS  # 20
+    DOT_SIZE = 14                # LED pixel size (smaller than cell for grid gap)
+
     # Colors
-    BG_COLOR = (255, 240, 245)       # Soft pink-white background
-    FACE_COLOR = (255, 228, 196)     # Bisque face
-    EYE_WHITE = (255, 255, 255)
-    EYE_PUPIL = (50, 50, 50)
-    CHEEK_COLOR = (255, 182, 193)    # Light pink
-    MOUTH_COLOR = (200, 80, 80)
-    ACCENT_COLOR = (100, 149, 237)   # Cornflower blue
+    BG_COLOR = (3, 7, 18)          # Deep blue-black
+    GRID_COLOR = (10, 21, 37)      # Dark grid cell background
+    LED_COLOR = (0, 229, 255)     # Cyan glow (#00e5ff)
+    LED_LOVE = (255, 102, 178)    # Pink for love
+    LED_ANGRY = (255, 51, 102)    # Red for angry
+    LED_SLEEPY = (0, 184, 212)   # Dim cyan for sleepy
+    BORDER_COLOR = (0, 229, 255)  # Cyan border
 
     def __init__(self):
         self.screen: Optional[pygame.Surface] = None
@@ -87,12 +95,15 @@ class CuteFaceDisplay:
         # Animation state
         self._blink_state = 0.0  # 0=open, 1=closed
         self._blink_timer = 0.0
-        self._next_blink = 2.5 + (hash(id(self)) % 100) / 50.0  # randomize slightly
+        self._next_blink = 2.5 + (hash(id(self)) % 100) / 50.0
         self._time = 0.0
 
         # Eye tracking target (normalized -1 to 1)
         self._eye_target_x = 0.0
         self._eye_target_y = 0.0
+
+        # Pre-rendered glow surface to avoid per-frame allocation
+        self._glow_surf: Optional[pygame.Surface] = None
 
     def init(self) -> bool:
         """Initialize pygame and enter fullscreen mode"""
@@ -106,16 +117,15 @@ class CuteFaceDisplay:
             is_x11 = os.environ.get('SDL_VIDEODRIVER') == 'x11' or bool(os.environ.get('DISPLAY'))
             
             if is_x11:
-                # On KDE Plasma / desktop: pure software surface, bypass compositor
-                # NOFRAME only (no FULLSCREEN/DOUBLEBUF/HWSURFACE) to avoid Mali GL conflict with KWin
+                # FULLSCREEN + NOFRAME hides KDE taskbar; software render avoids Mali GL conflict
                 os.environ['SDL_VIDEO_WINDOW_POS'] = '0,0'
                 os.environ['SDL_VIDEO_CENTERED'] = '0'
-                print(f"[FaceDisplay] Creating X11 NOFRAME window {self.WIDTH}x{self.HEIGHT} (software render)")
+                print(f"[FaceDisplay] Creating X11 FULLSCREEN+NOFRAME window {self.WIDTH}x{self.HEIGHT} (software render)")
                 self.screen = pygame.display.set_mode(
                     (self.WIDTH, self.HEIGHT),
-                    pygame.NOFRAME
+                    pygame.FULLSCREEN | pygame.NOFRAME
                 )
-                print(f"[FaceDisplay] X11 software surface created OK")
+                print("[FaceDisplay] X11 fullscreen surface created OK")
                 print(f"[FaceDisplay] Surface type: {type(self.screen)}, depth={self.screen.get_bitsize() if self.screen else 'None'}")
                 try:
                     info = pygame.display.Info()
@@ -139,11 +149,18 @@ class CuteFaceDisplay:
             if self.screen is None:
                 raise RuntimeError("pygame.display.set_mode returned None")
 
+            # Pre-render glow overlay (circular soft glow behind each LED)
+            glow_r = self.DOT_SIZE // 2 + 6
+            self._glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+            # Draw radial gradient-like glow using concentric circles
+            for radius, alpha in [(glow_r, 30), (glow_r - 2, 50), (glow_r - 4, 80)]:
+                pygame.draw.circle(self._glow_surf, (0, 229, 255, alpha), (glow_r, glow_r), radius)
+
             pygame.mouse.set_visible(False)
             self.running = True
             self.render_thread = threading.Thread(target=self._render_loop, daemon=True)
             self.render_thread.start()
-            print(f"[FaceDisplay] Started {self.WIDTH}x{self.HEIGHT} cute face display")
+            print(f"[FaceDisplay] Started {self.WIDTH}x{self.HEIGHT} pixel face display")
             return True
         except Exception as e:
             print(f"[FaceDisplay] Failed to init: {e}")
@@ -230,225 +247,275 @@ class CuteFaceDisplay:
             else:
                 self._blink_state = max(0.0, self._blink_state - dt * 15.0)
 
-    def _lerp(self, a: float, b: float, t: float) -> float:
-        return a + (b - a) * t
+    # ===================== LED Matrix Drawing =====================
+
+    def _pixel_rect(self, left: int, top: int, w: int, h: int) -> List[Tuple[int, int]]:
+        """Return list of (col, row) for a filled rectangle"""
+        return [(c, r) for c in range(left, left + w) for r in range(top, top + h)]
+
+    def _pixel_line(self, x0: int, y0: int, x1: int, y1: int) -> List[Tuple[int, int]]:
+        """Bresenham line on pixel grid"""
+        points = []
+        dx = abs(x1 - x0)
+        dy = abs(y1 - y0)
+        sx = 1 if x0 < x1 else -1
+        sy = 1 if y0 < y1 else -1
+        err = dx - dy
+        while True:
+            points.append((x0, y0))
+            if x0 == x1 and y0 == y1:
+                break
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                x0 += sx
+            if e2 < dx:
+                err += dx
+                y0 += sy
+        return points
+
+    def _draw_led_pixel(self, col: int, row: int, color: Tuple[int, int, int], glow: bool = True):
+        """Draw a single LED pixel with optional glow"""
+        if not self.screen:
+            return
+        x = int(col * self.CELL_W + (self.CELL_W - self.DOT_SIZE) / 2)
+        y = int(row * self.CELL_H + (self.CELL_H - self.DOT_SIZE) / 2)
+        ds = self.DOT_SIZE
+
+        if glow and self._glow_surf:
+            gr = self._glow_surf.get_width() // 2
+            self.screen.blit(self._glow_surf, (x + ds // 2 - gr, y + ds // 2 - gr))
+
+        # Main LED body
+        pygame.draw.rect(self.screen, color, (x, y, ds, ds), border_radius=2)
+        # Inner highlight
+        bright = tuple(min(255, c + 80) for c in color)
+        pygame.draw.rect(self.screen, bright, (x + 3, y + 3, ds - 6, ds - 6), border_radius=1)
+
+    def _draw_pixel_border(self):
+        """Draw dashed LED border around screen edge"""
+        color = self.BORDER_COLOR
+        cmax = self.GRID_COLS - 1
+        rmax = self.GRID_ROWS - 1
+        # Top & Bottom
+        for c in range(self.GRID_COLS):
+            if c % 2 == 0:
+                self._draw_led_pixel(c, 0, color, glow=False)
+                self._draw_led_pixel(c, rmax, color, glow=False)
+        # Left & Right
+        for r in range(self.GRID_ROWS):
+            if r % 2 == 0:
+                self._draw_led_pixel(0, r, color, glow=False)
+                self._draw_led_pixel(cmax, r, color, glow=False)
+        # Rounded corners: extra bright pixels
+        corners = [(1, 1), (cmax - 1, 1), (1, rmax - 1), (cmax - 1, rmax - 1)]
+        for cc, rr in corners:
+            self._draw_led_pixel(cc, rr, color, glow=True)
+
+    def _draw_pixel_grid(self):
+        """Draw dark grid background (dim LED cells)"""
+        for c in range(self.GRID_COLS):
+            for r in range(self.GRID_ROWS):
+                self._draw_led_pixel(c, r, self.GRID_COLOR, glow=False)
+
+    def _get_eye_pixels(self, emotion: str, blink: float) -> List[Tuple[int, int]]:
+        """Get eye pixel coordinates for emotion"""
+        if blink > 0.5:
+            # Closed eyes: thin horizontal lines
+            return self._pixel_rect(8, 10, 5, 1) + self._pixel_rect(27, 10, 5, 1)
+
+        if emotion == "neutral":
+            return self._pixel_rect(8, 8, 5, 5) + self._pixel_rect(27, 8, 5, 5)
+
+        elif emotion == "happy":
+            # Chevron up ^^
+            left = [(7, 12), (8, 11), (9, 10), (10, 9), (11, 10), (12, 11), (13, 12)]
+            right = [(26, 12), (27, 11), (28, 10), (29, 9), (30, 10), (31, 11), (32, 12)]
+            return left + right
+
+        elif emotion == "sad":
+            # Inverted chevron vv
+            left = [(7, 9), (8, 10), (9, 11), (10, 12), (11, 11), (12, 10), (13, 9)]
+            right = [(26, 9), (27, 10), (28, 11), (29, 12), (30, 11), (31, 10), (32, 9)]
+            return left + right
+
+        elif emotion == "angry":
+            # Square eyes with cross detail (like reference image)
+            left = self._pixel_rect(7, 8, 6, 6)
+            left += self._pixel_line(7, 10, 12, 10)   # horizontal cross
+            left += self._pixel_line(9, 8, 9, 13)     # vertical cross
+            right = self._pixel_rect(26, 8, 6, 6)
+            right += self._pixel_line(26, 10, 31, 10)
+            right += self._pixel_line(28, 8, 28, 13)
+            return left + right
+
+        elif emotion == "surprised":
+            return self._pixel_rect(7, 7, 7, 7) + self._pixel_rect(26, 7, 7, 7)
+
+        elif emotion == "sleepy":
+            return self._pixel_rect(8, 10, 5, 1) + self._pixel_rect(27, 10, 5, 1)
+
+        elif emotion == "love":
+            # Heart-shaped eyes
+            left = [(8, 9), (10, 9), (7, 10), (8, 10), (9, 10), (10, 10), (11, 10),
+                    (8, 11), (9, 11), (10, 11), (9, 12)]
+            right = [(28, 9), (30, 9), (27, 10), (28, 10), (29, 10), (30, 10), (31, 10),
+                     (28, 11), (29, 11), (30, 11), (29, 12)]
+            return left + right
+
+        elif emotion == "cool":
+            return self._pixel_rect(7, 9, 6, 3) + self._pixel_rect(26, 9, 6, 3)
+
+        return []
+
+    def _get_brow_pixels(self, emotion: str) -> List[Tuple[int, int]]:
+        """Get eyebrow pixel coordinates"""
+        if emotion == "angry":
+            # Angry: thick slanted brows (inner low, outer high)
+            left = self._pixel_line(5, 7, 14, 3) + self._pixel_line(5, 8, 14, 4)
+            right = self._pixel_line(25, 3, 34, 7) + self._pixel_line(25, 4, 34, 8)
+            return left + right
+
+        elif emotion == "sad":
+            # Sad: drooping brows
+            left = self._pixel_line(6, 4, 13, 7)
+            right = self._pixel_line(26, 7, 33, 4)
+            return left + right
+
+        elif emotion == "happy":
+            # Happy: gentle raised brows
+            left = self._pixel_line(6, 5, 13, 3)
+            right = self._pixel_line(26, 3, 33, 5)
+            return left + right
+
+        elif emotion == "surprised":
+            # Surprised: high arches
+            left = self._pixel_line(6, 4, 13, 2)
+            right = self._pixel_line(26, 2, 33, 4)
+            return left + right
+
+        return []
+
+    def _get_mouth_pixels(self, emotion: str) -> List[Tuple[int, int]]:
+        """Get mouth pixel coordinates"""
+        if emotion == "neutral":
+            return self._pixel_rect(16, 17, 9, 2)
+
+        elif emotion == "happy":
+            # Smile arc
+            return [(14, 16), (15, 17), (16, 18), (17, 18), (18, 19), (19, 19),
+                    (20, 19), (21, 19), (22, 18), (23, 18), (24, 17), (25, 16)]
+
+        elif emotion == "sad":
+            # Frown arc
+            return [(14, 18), (15, 17), (16, 16), (17, 16), (18, 15), (19, 15),
+                    (20, 15), (21, 15), (22, 16), (23, 16), (24, 17), (25, 18)]
+
+        elif emotion == "angry":
+            # Flat mouth with slight tension
+            return self._pixel_rect(14, 17, 13, 2)
+
+        elif emotion == "surprised":
+            return self._pixel_rect(17, 15, 7, 7)
+
+        elif emotion == "sleepy":
+            return self._pixel_rect(17, 17, 7, 1)
+
+        elif emotion == "love":
+            return [(15, 17), (16, 18), (17, 18), (18, 18), (19, 18),
+                    (20, 18), (21, 18), (22, 18), (23, 17)]
+
+        elif emotion == "cool":
+            return self._pixel_rect(16, 17, 9, 1)
+
+        return []
+
+    def _get_cheek_pixels(self, emotion: str) -> List[Tuple[int, int]]:
+        """Get decorative cheek pixels (hearts, etc.)"""
+        if emotion == "angry":
+            # Small hearts on cheeks (like reference image)
+            left = [(3, 13), (5, 13), (2, 14), (3, 14), (4, 14), (5, 14), (6, 14),
+                    (3, 15), (4, 15), (5, 15), (4, 16)]
+            right = [(34, 13), (36, 13), (33, 14), (34, 14), (35, 14), (36, 14), (37, 14),
+                     (34, 15), (35, 15), (36, 15), (35, 16)]
+            return left + right
+
+        elif emotion == "love":
+            left = [(3, 14), (5, 14), (2, 15), (3, 15), (4, 15), (5, 15), (6, 15),
+                    (3, 16), (4, 16), (5, 16), (4, 17)]
+            right = [(34, 14), (36, 14), (33, 15), (34, 15), (35, 15), (36, 15), (37, 15),
+                     (34, 16), (35, 16), (36, 16), (35, 17)]
+            return left + right
+
+        return []
+
+    def _get_bridge_pixels(self, emotion: str) -> List[Tuple[int, int]]:
+        """Sunglasses bridge for cool mode"""
+        if emotion == "cool":
+            return self._pixel_rect(13, 10, 14, 1)
+        return []
+
+    def _emotion_color(self, emotion: str) -> Tuple[int, int, int]:
+        """LED color per emotion"""
+        if emotion == "love":
+            return self.LED_LOVE
+        elif emotion == "angry":
+            return self.LED_ANGRY
+        elif emotion == "sleepy":
+            return self.LED_SLEEPY
+        return self.LED_COLOR
 
     def _draw_frame(self):
-        """Draw the complete cute face frame"""
+        """Draw the complete LED matrix face frame"""
         if not self.screen:
             return
 
         screen = self.screen
-        w, h = self.WIDTH, self.HEIGHT
-        cx, cy = w // 2, h // 2
         emotion = self._emotion
-        t = self._emotion_transition
+        blink = self._blink_state
+        color = self._emotion_color(emotion)
 
-        # Background
+        # 1. Background
         screen.fill(self.BG_COLOR)
 
-        # Decorative rounded background card
-        card_rect = pygame.Rect(40, 20, w - 80, h - 40)
-        pygame.draw.rect(screen, (255, 255, 255), card_rect, border_radius=30)
-        pygame.draw.rect(screen, self.ACCENT_COLOR, card_rect, width=4, border_radius=30)
+        # 2. Dark grid background
+        self._draw_pixel_grid()
 
-        # Face base (round shape with subtle shadow)
-        face_radius = 160
-        face_center = (cx, cy - 10)
-        shadow_offset = (8, 12)
-        pygame.draw.circle(screen, (200, 200, 210),
-                          (face_center[0] + shadow_offset[0], face_center[1] + shadow_offset[1]), face_radius)
-        pygame.draw.circle(screen, self.FACE_COLOR, face_center, face_radius)
+        # 3. Dashed LED border
+        self._draw_pixel_border()
 
-        # Determine eye/mouth parameters by emotion
-        eye_open_h = 50
-        eye_open_w = 55
-        eye_y_offset = -40
-        mouth_w = 60
-        mouth_h = 20
-        mouth_y = 50
-        blush_alpha = 180
-        brow_angle = 0
-        extra_features = []
+        # 4. Collect all active pixels for this emotion
+        pixels = []
+        pixels += self._get_eye_pixels(emotion, blink)
+        pixels += self._get_brow_pixels(emotion)
+        pixels += self._get_mouth_pixels(emotion)
+        pixels += self._get_cheek_pixels(emotion)
+        pixels += self._get_bridge_pixels(emotion)
 
-        if emotion == "happy":
-            eye_open_h = 35  # ^_^ style
-            mouth_w = 80
-            mouth_h = 40
-            blush_alpha = 220
-        elif emotion == "sad":
-            eye_y_offset = -30
-            brow_angle = -15
-            mouth_h = -15
-            mouth_w = 50
-        elif emotion == "angry":
-            eye_open_h = 45
-            brow_angle = 20
-            mouth_h = -25
-            mouth_w = 40
-        elif emotion == "surprised":
-            eye_open_h = 70
-            eye_open_w = 50
-            mouth_w = 30
-            mouth_h = 40
-        elif emotion == "sleepy":
-            eye_open_h = 8
-            mouth_w = 30
-            mouth_h = 5
-            blush_alpha = 120
-        elif emotion == "love":
-            eye_open_h = 40
-            eye_open_w = 50
-            blush_alpha = 255
-            extra_features = ["heart_eyes"]
-        elif emotion == "cool":
-            eye_open_h = 30
-            blush_alpha = 0
-            extra_features = ["sunglasses"]
-
-        # Apply blink (interpolate toward closed)
-        blink = self._blink_state
-        eye_h = self._lerp(eye_open_h, 2, blink)
-        eye_w = eye_open_w
-
-        # Eye positions with slight gaze tracking
-        gaze_x = self._eye_target_x * 8
-        gaze_y = self._eye_target_y * 6
-
-        left_eye_center = (cx - 70 + gaze_x, cy + eye_y_offset + gaze_y)
-        right_eye_center = (cx + 70 + gaze_x, cy + eye_y_offset + gaze_y)
-
-        # Draw eyes
-        if "heart_eyes" in extra_features:
-            self._draw_heart_eye(screen, left_eye_center, eye_w, eye_h)
-            self._draw_heart_eye(screen, right_eye_center, eye_w, eye_h)
-        elif "sunglasses" in extra_features:
-            self._draw_sunglasses(screen, left_eye_center, right_eye_center, eye_w + 10)
-        else:
-            self._draw_eye(screen, left_eye_center, eye_w, eye_h)
-            self._draw_eye(screen, right_eye_center, eye_w, eye_h)
-
-        # Eyebrows (for angry/sad)
-        if brow_angle != 0:
-            brow_len = 40
-            brow_y = eye_y_offset - 50
-            # Left brow
-            self._draw_brow(screen, (cx - 70, cy + brow_y), brow_len, -brow_angle)
-            # Right brow
-            self._draw_brow(screen, (cx + 70, cy + brow_y), brow_len, brow_angle)
-
-        # Blush circles
-        if blush_alpha > 0:
-            blush_surf = pygame.Surface((80, 50), pygame.SRCALPHA)
-            pygame.draw.ellipse(blush_surf, (*self.CHEEK_COLOR, blush_alpha), (0, 0, 80, 50))
-            screen.blit(blush_surf, (cx - 150, cy + 10))
-            screen.blit(blush_surf, (cx + 70, cy + 10))
-
-        # Mouth
-        self._draw_mouth(screen, (cx, cy + mouth_y), mouth_w, mouth_h)
-
-        # Decorative accessories
-        if emotion == "cool":
-            # Little "cool" sparkles
-            sparkle_time = self._time * 2
-            for i, offset in enumerate([(80, -120), (-90, -110), (0, -150)]):
-                sx = cx + offset[0] + math.sin(sparkle_time + i * 1.5) * 5
-                sy = cy + offset[1] + math.cos(sparkle_time + i * 1.2) * 5
-                self._draw_sparkle(screen, (sx, sy), 12, (255, 215, 0))
-
-        # Status text at bottom
-        font = pygame.font.SysFont("notosanscjksc", 28) if pygame.font.get_default_font() else None
-        if font:
-            label = f"Mode: {emotion.upper()}"
-            text_surf = font.render(label, True, (100, 100, 120))
-            screen.blit(text_surf, (cx - text_surf.get_width() // 2, h - 60))
-
-    def _draw_eye(self, screen, center, w, h):
-        """Draw a single cute eye (white oval + pupil)"""
-        # White sclera
-        eye_rect = pygame.Rect(center[0] - w // 2, center[1] - h // 2, w, h)
-        pygame.draw.ellipse(screen, self.EYE_WHITE, eye_rect)
-        pygame.draw.ellipse(screen, (200, 200, 200), eye_rect, width=2)
-
-        # Pupil (small circle near bottom for cute look)
-        if h > 10:
-            pupil_y = center[1] + h * 0.15
-            pygame.draw.circle(screen, self.EYE_PUPIL, (center[0], int(pupil_y)), max(4, w // 5))
-            # Highlight
-            pygame.draw.circle(screen, (255, 255, 255), (center[0] - 3, int(pupil_y) - 3), 3)
-
-    def _draw_heart_eye(self, screen, center, w, h):
-        """Draw heart-shaped eye"""
-        color = (255, 100, 150)
-        scale = h / 40.0
-        points = []
-        for i in range(20):
-            t = i / 20.0 * 2 * math.pi
-            x = scale * 16 * (math.sin(t) ** 3)
-            y = -scale * (13 * math.cos(t) - 5 * math.cos(2*t) - 2 * math.cos(3*t) - math.cos(4*t))
-            points.append((center[0] + x, center[1] + y - 5))
-        pygame.draw.polygon(screen, color, points)
-        pygame.draw.polygon(screen, (200, 60, 100), points, width=2)
-
-    def _draw_sunglasses(self, screen, left_eye, right_eye, size):
-        """Draw sunglasses (cool mode)"""
-        glass_color = (30, 30, 30)
-        # Left lens
-        pygame.draw.ellipse(screen, glass_color,
-                            (left_eye[0] - size // 2, left_eye[1] - size // 3, size, size // 1.5))
-        # Right lens
-        pygame.draw.ellipse(screen, glass_color,
-                            (right_eye[0] - size // 2, right_eye[1] - size // 3, size, size // 1.5))
-        # Bridge
-        pygame.draw.line(screen, glass_color,
-                         (left_eye[0] + size // 2, left_eye[1]),
-                         (right_eye[0] - size // 2, right_eye[1]), 4)
-        # Reflection line
-        pygame.draw.line(screen, (200, 200, 200),
-                         (left_eye[0] - size // 3, left_eye[1] - size // 6),
-                         (left_eye[0] + size // 4, left_eye[1] - size // 4), 2)
-
-    def _draw_brow(self, screen, center, length, angle_deg):
-        """Draw an eyebrow at angle"""
-        angle = math.radians(angle_deg)
-        dx = length * math.cos(angle) / 2
-        dy = length * math.sin(angle) / 2
-        start = (center[0] - dx, center[1] - dy)
-        end = (center[0] + dx, center[1] + dy)
-        pygame.draw.line(screen, (80, 50, 40), start, end, 5)
-        pygame.draw.line(screen, (120, 80, 60), start, end, 3)
-
-    def _draw_mouth(self, screen, center, w, h):
-        """Draw mouth: positive h = smile (arc down), negative h = frown (arc up)"""
-        if abs(h) < 3:
-            # Small line mouth
-            pygame.draw.line(screen, self.MOUTH_COLOR,
-                             (center[0] - w // 2, center[1]),
-                             (center[0] + w // 2, center[1]), 4)
-        else:
-            # Arc mouth
-            rect = pygame.Rect(center[0] - w // 2, center[1] - abs(h), w, abs(h) * 2)
-            if h > 0:
-                # Smile: draw lower arc
-                pygame.draw.arc(screen, self.MOUTH_COLOR, rect, math.pi, 2 * math.pi, 4)
+        # Apply slight eye gaze tracking offset
+        gaze_c = int(self._eye_target_x * 1.5)
+        gaze_r = int(self._eye_target_y * 1.5)
+        # Only offset eye pixels (rough filter by being in upper half)
+        final_pixels = []
+        for c, r in pixels:
+            if r < 14:  # eyes/brows region
+                nc, nr = c + gaze_c, r + gaze_r
+                if 0 <= nc < self.GRID_COLS and 0 <= nr < self.GRID_ROWS:
+                    final_pixels.append((nc, nr))
             else:
-                # Frown: draw upper arc
-                pygame.draw.arc(screen, self.MOUTH_COLOR, rect, 0, math.pi, 4)
-            # Fill for deeper smile
-            if h > 15:
-                inner_rect = pygame.Rect(center[0] - w // 2 + 8, center[1] - abs(h) + 8,
-                                         w - 16, abs(h) * 2 - 16)
-                pygame.draw.arc(screen, (255, 160, 160), inner_rect, math.pi, 2 * math.pi, 3)
+                final_pixels.append((c, r))
 
-    def _draw_sparkle(self, screen, center, size, color):
-        """Draw a 4-point sparkle/star"""
-        points = []
-        for i in range(8):
-            angle = i * math.pi / 4
-            r = size if i % 2 == 0 else size * 0.4
-            points.append((center[0] + r * math.cos(angle), center[1] + r * math.sin(angle)))
-        pygame.draw.polygon(screen, color, points)
-        pygame.draw.polygon(screen, (255, 255, 255), points, width=1)
+        # Remove duplicates
+        final_pixels = list(dict.fromkeys(final_pixels))
+
+        # 5. Draw active LED pixels with glow
+        for c, r in final_pixels:
+            self._draw_led_pixel(c, r, color, glow=True)
+
+        # 6. Subtle scanline effect (horizontal dim lines)
+        for r in range(0, self.HEIGHT, 4):
+            pygame.draw.line(screen, (0, 0, 0, 30), (0, r), (self.WIDTH, r), 1)
+
 
     def get_state(self) -> dict:
         with self.lock:
