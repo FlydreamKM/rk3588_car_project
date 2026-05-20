@@ -210,6 +210,10 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
   Widget _buildMotorMiniHud(RobotProvider provider) {
     final m1 = provider.state['motor1'] as Map<String, dynamic>? ?? {};
     final m2 = provider.state['motor2'] as Map<String, dynamic>? ?? {};
+    String fmt(dynamic v) {
+      final d = (v as num?)?.toDouble() ?? 0;
+      return d.toStringAsFixed(1);
+    }
 
     return Container(
       padding: EdgeInsets.all(8),
@@ -222,11 +226,11 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'M1 s=${_fmt(m1['speed'])} a=${_fmt(m1['angle'])} pwm=${_fmt(m1['pwm'])}',
+            'M1 s=${fmt(m1['speed'])} a=${fmt(m1['angle'])} pwm=${fmt(m1['pwm'])}',
             style: TextStyle(color: Colors.cyanAccent, fontSize: 9, fontFamily: 'monospace'),
           ),
           Text(
-            'M2 s=${_fmt(m2['speed'])} a=${_fmt(m2['angle'])} pwm=${_fmt(m2['pwm'])}',
+            'M2 s=${fmt(m2['speed'])} a=${fmt(m2['angle'])} pwm=${fmt(m2['pwm'])}',
             style: TextStyle(color: Colors.cyanAccent, fontSize: 9, fontFamily: 'monospace'),
           ),
         ],
