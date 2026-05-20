@@ -36,10 +36,12 @@ def _auto_detect_display():
                 os.environ['SDL_VIDEODRIVER'] = 'x11'
                 print(f"[FaceDisplay] Auto-detected DISPLAY=:{display_num} from /tmp/.X11-unix/X{display_num}")
                 break
-    if os.environ.get('SDL_VIDEODRIVER') == 'x11':
-        # Bypass KWin compositor to avoid GL context conflict with Mali GPU
+    if os.environ.get('SDL_VIDEODRIVER') == 'x11' or os.environ.get('DISPLAY'):
+        # Force pure software rendering — disable SDL's OpenGL framebuffer acceleration
+        os.environ['SDL_FRAMEBUFFER_ACCELERATION'] = '0'
+        os.environ['SDL_RENDER_DRIVER'] = 'software'
         os.environ['SDL_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR'] = '1'
-        print("[FaceDisplay] Set NET_WM_BYPASS_COMPOSITOR=1 to avoid KWin GL conflict")
+        print("[FaceDisplay] Forced SOFTWARE render: SDL_FRAMEBUFFER_ACCELERATION=0, SDL_RENDER_DRIVER=software")
     elif os.path.exists('/dev/dri/card0'):
         os.environ['SDL_VIDEODRIVER'] = 'kmsdrm'
         print("[FaceDisplay] No X11 found, falling back to KMS/DRM")
@@ -113,7 +115,13 @@ class CuteFaceDisplay:
                     (self.WIDTH, self.HEIGHT),
                     pygame.NOFRAME
                 )
-                print("[FaceDisplay] X11 software surface created OK")
+                print(f"[FaceDisplay] X11 software surface created OK")
+                print(f"[FaceDisplay] Surface type: {type(self.screen)}, depth={self.screen.get_bitsize() if self.screen else 'None'}")
+                try:
+                    info = pygame.display.Info()
+                    print(f"[FaceDisplay] Display info: hw={info.hw}, wm={info.wm}")
+                except Exception as ie:
+                    print(f"[FaceDisplay] Display info error: {ie}")
             else:
                 # Try KMS/DRM first (best for RK3588S direct HDMI)
                 print("[FaceDisplay] Trying KMS/DRM fullscreen...")
@@ -176,7 +184,8 @@ class CuteFaceDisplay:
                 self._time += dt
                 self._update_animations(dt)
                 self._draw_frame()
-                pygame.display.flip()
+                # Use update() instead of flip() to avoid GL swap chain
+                pygame.display.update()
                 frame_count += 1
                 if time.time() - last_log >= 5.0:
                     print(f"[FaceDisplay] Rendering at ~{frame_count/5:.1f} fps ({self._emotion})")
@@ -192,6 +201,8 @@ class CuteFaceDisplay:
                             self.running = False
             except Exception as e:
                 print(f"[FaceDisplay] Render loop error: {e}")
+                import traceback
+                traceback.print_exc()
                 time.sleep(0.5)
 
     def _update_animations(self, dt: float):
