@@ -552,7 +552,6 @@ class ResolutionPicker extends StatelessWidget {
       ),
     );
   }
-}
 
   // ── Draggable 3D Cube (screen-bounded) ──
   Widget _buildDraggableCube(BuildContext context, RobotProvider provider) {
@@ -594,6 +593,7 @@ class ResolutionPicker extends StatelessWidget {
       ),
     );
   }
+}
 
 class _CrosshairPainter extends CustomPainter {
   @override
