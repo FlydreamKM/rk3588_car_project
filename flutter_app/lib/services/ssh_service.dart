@@ -152,21 +152,32 @@ class SshService {
           : 'cd ~/rk3588_car_project/rk3588_backend && setsid bash -c "nohup bash start.sh > /tmp/car_backend.log 2>&1" \u003e/dev/null 2\u003e\u00261 \u0026';
       await _client!.run(command);
 
-      // Wait for backend to boot
-      await Future.delayed(Duration(seconds: 3));
-
-      // Check if port 5000 is actually listening
+      // Poll logs for [DONE] marker instead of blind 3s wait
+      const maxWaitSeconds = 30;
+      for (var i = 0; i < maxWaitSeconds * 2; i++) {
+        await Future.delayed(Duration(milliseconds: 500));
+        
+        final logBytes = await _client!.run('tail -n 10 /tmp/car_backend.log 2\u003e/dev/null || echo "No log"');
+        final logs = utf8.decode(logBytes);
+        
+        if (logs.contains('[DONE]')) {
+          return {'success': true, 'logs': logs};
+        }
+        if (logs.contains('[ERROR]')) {
+          return {'success': false, 'error': 'Backend startup failed', 'logs': logs};
+        }
+      }
+      
+      // Timeout fallback — check port directly
       final check = await _client!.run('ss -tlnp | grep -q ":5000" \u0026\u0026 echo "OK" || echo "FAIL"');
       final status = utf8.decode(check).trim();
-
       if (status == "OK") {
         return {'success': true};
       }
-
-      // Port not open — fetch recent log for diagnosis
+      
       final logBytes = await _client!.run('tail -n 30 /tmp/car_backend.log 2\u003e/dev/null || echo "No log"');
       final logs = utf8.decode(logBytes).trim();
-      return {'success': false, 'error': 'Backend did not start on port 5000', 'logs': logs};
+      return {'success': false, 'error': 'Backend startup timeout (30s)', 'logs': logs};
     } catch (e) {
       print('SSH start server error: $e');
       return {'success': false, 'error': e.toString()};

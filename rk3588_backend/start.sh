@@ -57,4 +57,23 @@ echo "API:          http://0.0.0.0:5000"
 echo ""
 echo "Press Ctrl+C to stop"
 
-python app.py
+python app.py &
+APP_PID=$!
+
+# Wait for backend to bind port 5000 (max 30s)
+for i in {1..30}; do
+    sleep 1
+    if ss -tlnp 2>/dev/null | grep -q ":5000"; then
+        echo "[DONE] RK3588S Backend Ready on port 5000"
+        break
+    fi
+done
+
+# If still not listening, report error
+if ! ss -tlnp 2>/dev/null | grep -q ":5000"; then
+    echo "[ERROR] Backend failed to start within 30 seconds"
+    kill $APP_PID 2>/dev/null || true
+    exit 1
+fi
+
+wait $APP_PID

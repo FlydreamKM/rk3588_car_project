@@ -169,6 +169,27 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
+  static Future<Map<String, dynamic>> calibrateImu(String type, {double? temperature}) async {
+    final body = <String, dynamic>{'type': type};
+    if (temperature != null) body['temperature'] = temperature;
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/imu/calibrate'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> getImuCalibrationStatus() async {
+    final response = await http.get(Uri.parse('$baseUrl/api/imu/calibrate/status'));
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> getImuVersion() async {
+    final response = await http.get(Uri.parse('$baseUrl/api/imu/version'));
+    return jsonDecode(response.body);
+  }
+
   // ===================== Tracking =====================
   static Future<Map<String, dynamic>> getTracking() async {
     final response = await http.get(Uri.parse('$baseUrl/api/tracking'));
