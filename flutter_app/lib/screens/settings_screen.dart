@@ -4,6 +4,7 @@ import 'package:glassmorphism_ui/glassmorphism_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/robot_provider.dart';
+import '../services/api_service.dart';
 import '../services/ssh_service.dart';
 import 'terminal_screen.dart';
 
