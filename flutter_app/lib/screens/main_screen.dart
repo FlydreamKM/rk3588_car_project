@@ -155,7 +155,16 @@ class _MainScreenState extends State<MainScreen> {
             Positioned(
               right: 20,
               top: screenH > 0 ? screenH / 2 - 60 : 180,
-              child: Cube3DWidget(size: 100),
+              child: Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange, width: 2),
+                ),
+                child: Center(child: Cube3DWidget(size: 100)),
+              ),
             ),
 
           // === HUD Settings overlay (LAST = true topmost layer) ===
@@ -277,66 +286,59 @@ class _MainScreenState extends State<MainScreen> {
         width: panelW,
         height: maxH,
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.55),
+          color: Colors.black.withOpacity(0.85),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.15)),
+          border: Border.all(color: Colors.cyanAccent.withOpacity(0.5), width: 2),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('HUD 设置', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                    SizedBox(height: 12),
-                    _buildHudToggle('电机数据', provider.showMotorHud, provider.setShowMotorHud),
-                    SizedBox(height: 6),
-                    _buildHudToggle('IMU 数据', provider.showImuHud, provider.setShowImuHud),
-                    SizedBox(height: 6),
-                    _buildHudToggle('3D 方块', provider.showCube3D, provider.setShowCube3D),
-                    if (provider.showCube3D) ...[
-                      Text('方块透明度 ${(provider.cubeOpacity * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 10)),
-                      Slider(
-                        value: provider.cubeOpacity,
-                        min: 0.0,
-                        max: 1.0,
-                        divisions: 20,
-                        activeColor: Colors.purpleAccent,
-                        inactiveColor: Colors.purpleAccent.withOpacity(0.2),
-                        onChanged: (v) => provider.setCubeOpacity(v),
-                      ),
-                    ],
-                    Divider(color: Colors.white.withOpacity(0.1), height: 16),
-                    Text('不透明度 ${(provider.hudOpacity * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                    Slider(
-                      value: provider.hudOpacity,
-                      min: 0.3,
-                      max: 1.0,
-                      divisions: 14,
-                      activeColor: Colors.cyanAccent,
-                      inactiveColor: Colors.cyanAccent.withOpacity(0.2),
-                      onChanged: (v) => provider.setHudOpacity(v),
-                    ),
-                    SizedBox(height: 4),
-                    Text('缩放 ${(provider.hudScale * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                    Slider(
-                      value: provider.hudScale,
-                      min: 0.5,
-                      max: 1.5,
-                      divisions: 20,
-                      activeColor: Colors.purpleAccent,
-                      inactiveColor: Colors.purpleAccent.withOpacity(0.2),
-                      onChanged: (v) => provider.setHudScale(v),
-                    ),
-                  ],
+          child: ListView(
+            padding: EdgeInsets.all(16),
+            children: [
+              Text('HUD 设置', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+              SizedBox(height: 12),
+              _buildHudToggle('电机数据', provider.showMotorHud, provider.setShowMotorHud),
+              SizedBox(height: 6),
+              _buildHudToggle('IMU 数据', provider.showImuHud, provider.setShowImuHud),
+              SizedBox(height: 6),
+              _buildHudToggle('3D 方块', provider.showCube3D, provider.setShowCube3D),
+              if (provider.showCube3D) ...[
+                Text('方块透明度 ${(provider.cubeOpacity * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                Slider(
+                  value: provider.cubeOpacity,
+                  min: 0.0,
+                  max: 1.0,
+                  divisions: 20,
+                  activeColor: Colors.purpleAccent,
+                  inactiveColor: Colors.purpleAccent.withOpacity(0.2),
+                  onChanged: (v) => provider.setCubeOpacity(v),
                 ),
+              ],
+              Divider(color: Colors.white.withOpacity(0.1), height: 16),
+              Text('不透明度 ${(provider.hudOpacity * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 11)),
+              Slider(
+                value: provider.hudOpacity,
+                min: 0.3,
+                max: 1.0,
+                divisions: 14,
+                activeColor: Colors.cyanAccent,
+                inactiveColor: Colors.cyanAccent.withOpacity(0.2),
+                onChanged: (v) => provider.setHudOpacity(v),
               ),
-            ),
+              SizedBox(height: 4),
+              Text('缩放 ${(provider.hudScale * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 11)),
+              Slider(
+                value: provider.hudScale,
+                min: 0.5,
+                max: 1.5,
+                divisions: 20,
+                activeColor: Colors.purpleAccent,
+                inactiveColor: Colors.purpleAccent.withOpacity(0.2),
+                onChanged: (v) => provider.setHudScale(v),
+              ),
+              // Extra bottom padding to ensure last item is not clipped
+              SizedBox(height: 20),
+            ],
           ),
         ),
       ),
@@ -713,13 +715,11 @@ class _MainScreenState extends State<MainScreen> {
         child: Container(
           padding: EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.6),
+            color: Colors.black.withOpacity(0.9),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: locked
-                  ? Colors.cyanAccent.withOpacity(0.3)
-                  : Colors.yellowAccent.withOpacity(0.6),
-              width: locked ? 1 : 2,
+              color: locked ? Colors.red : Colors.yellow,
+              width: locked ? 2 : 3,
             ),
           ),
           child: Column(
@@ -731,14 +731,14 @@ class _MainScreenState extends State<MainScreen> {
                 children: [
                   Icon(
                     locked ? Icons.lock_outline : Icons.lock_open,
-                    color: locked ? Colors.cyanAccent : Colors.yellowAccent,
+                    color: locked ? Colors.red : Colors.yellow,
                     size: 10,
                   ),
                   SizedBox(width: 4),
                   Text(
                     'MOTOR',
                     style: TextStyle(
-                      color: Colors.cyanAccent,
+                      color: Colors.red,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 2,
@@ -748,7 +748,7 @@ class _MainScreenState extends State<MainScreen> {
                     SizedBox(width: 6),
                     Text(
                       '拖拽中',
-                      style: TextStyle(color: Colors.yellowAccent, fontSize: 9),
+                      style: TextStyle(color: Colors.yellow, fontSize: 9),
                     ),
                   ],
                 ],
@@ -794,13 +794,11 @@ class _MainScreenState extends State<MainScreen> {
         child: Container(
           padding: EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.6),
+            color: Colors.black.withOpacity(0.9),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: locked
-                  ? Colors.purpleAccent.withOpacity(0.3)
-                  : Colors.yellowAccent.withOpacity(0.6),
-              width: locked ? 1 : 2,
+              color: locked ? Colors.green : Colors.yellow,
+              width: locked ? 2 : 3,
             ),
           ),
           child: Column(
@@ -812,14 +810,14 @@ class _MainScreenState extends State<MainScreen> {
                 children: [
                   Icon(
                     locked ? Icons.lock_outline : Icons.lock_open,
-                    color: locked ? Colors.purpleAccent : Colors.yellowAccent,
+                    color: locked ? Colors.green : Colors.yellow,
                     size: 10,
                   ),
                   SizedBox(width: 4),
                   Text(
                     'IMU',
                     style: TextStyle(
-                      color: Colors.purpleAccent,
+                      color: Colors.green,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 2,
@@ -829,7 +827,7 @@ class _MainScreenState extends State<MainScreen> {
                     SizedBox(width: 6),
                     Text(
                       '拖拽中',
-                      style: TextStyle(color: Colors.yellowAccent, fontSize: 9),
+                      style: TextStyle(color: Colors.yellow, fontSize: 9),
                     ),
                   ],
                 ],
