@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:ui';
 import 'package:glassmorphism_ui/glassmorphism_ui.dart';
 import 'package:provider/provider.dart';
 import '../providers/robot_provider.dart';
 import '../widgets/video_stream_widget.dart';
 import '../widgets/joystick_control.dart';
+import '../widgets/cube_3d_widget.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({Key? key}) : super(key: key);
@@ -140,6 +142,22 @@ class _MainScreenState extends State<MainScreen> {
             child: _buildConnectionBadge(provider.connected),
           ),
 
+          // === Draggable Motor HUD ===
+          if (provider.showMotorHud)
+            _buildDraggableMotorHud(provider, screenW, screenH),
+
+          // === Draggable IMU HUD ===
+          if (provider.showImuHud)
+            _buildDraggableImuHud(provider, screenW, screenH),
+
+          // === 3D Cube overlay ===
+          if (provider.showCube3D)
+            Positioned(
+              right: 20,
+              top: screenH > 0 ? screenH / 2 - 60 : 180,
+              child: Cube3DWidget(size: 100),
+            ),
+
           // === HUD Settings overlay (LAST = true topmost layer) ===
           if (_showControls && _showHudSettings)
             _buildHudSettingsOverlay(provider, screenW, screenH),
@@ -249,80 +267,74 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildHudSettingsOverlay(RobotProvider provider, double screenW, double screenH) {
-    // Adaptive width: if screen is narrow (< 500), use 85% width
     final panelW = (screenW > 0 && screenW < 500) ? screenW * 0.85 : 260.0;
-    // Max height to avoid overflow: 75% of screen height
     final maxH = screenH > 0 ? screenH * 0.75 : 300.0;
 
     return Positioned(
       top: 56,
       right: 12,
-      child: GlassContainer(
-        gradient: LinearGradient(
-          colors: [
-            Colors.black.withOpacity(0.7),
-            Colors.black.withOpacity(0.5),
-          ],
+      child: Container(
+        width: panelW,
+        height: maxH,
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.55),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.15)),
         ),
-        blur: 12,
-        borderRadius: BorderRadius.circular(16),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: panelW,
-            maxHeight: maxH,
-          ),
-          child: Padding(
-            padding: EdgeInsets.all(16),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
             child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('HUD 设置', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 12),
-                  // Motor HUD toggle
-                  _buildHudToggle('电机数据', provider.showMotorHud, provider.setShowMotorHud),
-                  SizedBox(height: 6),
-                  // IMU HUD toggle
-                  _buildHudToggle('IMU 数据', provider.showImuHud, provider.setShowImuHud),
-                  SizedBox(height: 6),
-                  // 3D Cube toggle
-                  _buildHudToggle('3D 方块', provider.showCube3D, provider.setShowCube3D),
-                  if (provider.showCube3D) ...[
-                    Text('方块透明度 ${(provider.cubeOpacity * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 10)),
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('HUD 设置', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                    SizedBox(height: 12),
+                    _buildHudToggle('电机数据', provider.showMotorHud, provider.setShowMotorHud),
+                    SizedBox(height: 6),
+                    _buildHudToggle('IMU 数据', provider.showImuHud, provider.setShowImuHud),
+                    SizedBox(height: 6),
+                    _buildHudToggle('3D 方块', provider.showCube3D, provider.setShowCube3D),
+                    if (provider.showCube3D) ...[
+                      Text('方块透明度 ${(provider.cubeOpacity * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                      Slider(
+                        value: provider.cubeOpacity,
+                        min: 0.0,
+                        max: 1.0,
+                        divisions: 20,
+                        activeColor: Colors.purpleAccent,
+                        inactiveColor: Colors.purpleAccent.withOpacity(0.2),
+                        onChanged: (v) => provider.setCubeOpacity(v),
+                      ),
+                    ],
+                    Divider(color: Colors.white.withOpacity(0.1), height: 16),
+                    Text('不透明度 ${(provider.hudOpacity * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 11)),
                     Slider(
-                      value: provider.cubeOpacity,
-                      min: 0.0,
+                      value: provider.hudOpacity,
+                      min: 0.3,
                       max: 1.0,
+                      divisions: 14,
+                      activeColor: Colors.cyanAccent,
+                      inactiveColor: Colors.cyanAccent.withOpacity(0.2),
+                      onChanged: (v) => provider.setHudOpacity(v),
+                    ),
+                    SizedBox(height: 4),
+                    Text('缩放 ${(provider.hudScale * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                    Slider(
+                      value: provider.hudScale,
+                      min: 0.5,
+                      max: 1.5,
                       divisions: 20,
                       activeColor: Colors.purpleAccent,
                       inactiveColor: Colors.purpleAccent.withOpacity(0.2),
-                      onChanged: (v) => provider.setCubeOpacity(v),
+                      onChanged: (v) => provider.setHudScale(v),
                     ),
                   ],
-                  Divider(color: Colors.white.withOpacity(0.1), height: 16),
-                  Text('不透明度 ${(provider.hudOpacity * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                  Slider(
-                    value: provider.hudOpacity,
-                    min: 0.3,
-                    max: 1.0,
-                    divisions: 14,
-                    activeColor: Colors.cyanAccent,
-                    inactiveColor: Colors.cyanAccent.withOpacity(0.2),
-                    onChanged: (v) => provider.setHudOpacity(v),
-                  ),
-                  SizedBox(height: 4),
-                  Text('缩放 ${(provider.hudScale * 100).toInt()}%', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                  Slider(
-                    value: provider.hudScale,
-                    min: 0.5,
-                    max: 1.5,
-                    divisions: 20,
-                    activeColor: Colors.purpleAccent,
-                    inactiveColor: Colors.purpleAccent.withOpacity(0.2),
-                    onChanged: (v) => provider.setHudScale(v),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -668,6 +680,233 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // ===================== Draggable Motor HUD =====================
+  Widget _buildDraggableMotorHud(RobotProvider provider, double screenW, double screenH) {
+    final left = provider.motorHudX * screenW;
+    final top = provider.motorHudY * screenH;
+    final locked = provider.motorHudLocked;
+
+    return Positioned(
+      left: left,
+      top: top,
+      child: GestureDetector(
+        onPanUpdate: locked
+            ? null
+            : (details) {
+                final newX = (left + details.delta.dx) / screenW;
+                final newY = (top + details.delta.dy) / screenH;
+                provider.setMotorHudPos(newX.clamp(0.0, 0.9), newY.clamp(0.0, 0.85));
+              },
+        onLongPress: () {
+          provider.setMotorHudLocked(!locked);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(locked ? '电机HUD已解锁，可拖拽' : '电机HUD已锁定'),
+              duration: Duration(seconds: 1),
+              backgroundColor: locked ? Colors.green : Colors.orange,
+            ),
+          );
+        },
+        child: Container(
+          padding: EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: locked
+                  ? Colors.cyanAccent.withOpacity(0.3)
+                  : Colors.yellowAccent.withOpacity(0.6),
+              width: locked ? 1 : 2,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    locked ? Icons.lock_outline : Icons.lock_open,
+                    color: locked ? Colors.cyanAccent : Colors.yellowAccent,
+                    size: 10,
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'MOTOR',
+                    style: TextStyle(
+                      color: Colors.cyanAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  if (!locked) ...[
+                    SizedBox(width: 6),
+                    Text(
+                      '拖拽中',
+                      style: TextStyle(color: Colors.yellowAccent, fontSize: 9),
+                    ),
+                  ],
+                ],
+              ),
+              SizedBox(height: 6),
+              _buildMotorRow('M1', provider.state['motor1'] as Map<String, dynamic>? ?? {}),
+              SizedBox(height: 4),
+              _buildMotorRow('M2', provider.state['motor2'] as Map<String, dynamic>? ?? {}),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ===================== Draggable IMU HUD =====================
+  Widget _buildDraggableImuHud(RobotProvider provider, double screenW, double screenH) {
+    final left = provider.imuHudX * screenW;
+    final top = provider.imuHudY * screenH;
+    final locked = provider.imuHudLocked;
+
+    return Positioned(
+      left: left,
+      top: top,
+      child: GestureDetector(
+        onPanUpdate: locked
+            ? null
+            : (details) {
+                final newX = (left + details.delta.dx) / screenW;
+                final newY = (top + details.delta.dy) / screenH;
+                provider.setImuHudPos(newX.clamp(0.0, 0.9), newY.clamp(0.0, 0.85));
+              },
+        onLongPress: () {
+          provider.setImuHudLocked(!locked);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(locked ? 'IMU HUD已解锁，可拖拽' : 'IMU HUD已锁定'),
+              duration: Duration(seconds: 1),
+              backgroundColor: locked ? Colors.green : Colors.orange,
+            ),
+          );
+        },
+        child: Container(
+          padding: EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: locked
+                  ? Colors.purpleAccent.withOpacity(0.3)
+                  : Colors.yellowAccent.withOpacity(0.6),
+              width: locked ? 1 : 2,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    locked ? Icons.lock_outline : Icons.lock_open,
+                    color: locked ? Colors.purpleAccent : Colors.yellowAccent,
+                    size: 10,
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'IMU',
+                    style: TextStyle(
+                      color: Colors.purpleAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  if (!locked) ...[
+                    SizedBox(width: 6),
+                    Text(
+                      '拖拽中',
+                      style: TextStyle(color: Colors.yellowAccent, fontSize: 9),
+                    ),
+                  ],
+                ],
+              ),
+              SizedBox(height: 6),
+              _buildImuRow('Pitch', provider.state['imu'] as Map<String, dynamic>? ?? {}),
+              SizedBox(height: 3),
+              _buildImuRow('Roll', provider.state['imu'] as Map<String, dynamic>? ?? {}),
+              SizedBox(height: 3),
+              _buildImuRow('Yaw', provider.state['imu'] as Map<String, dynamic>? ?? {}),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMotorRow(String label, Map<String, dynamic> data) {
+    final speed = (data['speed'] as num?)?.toDouble() ?? 0;
+    final angle = (data['angle'] as num?)?.toDouble() ?? 0;
+    final pwm = (data['pwm'] as num?)?.toDouble() ?? 0;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 22,
+          child: Text(
+            label,
+            style: TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold),
+          ),
+        ),
+        Text(
+          's=${speed.toStringAsFixed(1).padLeft(6)}  a=${angle.toStringAsFixed(1).padLeft(6)}  pwm=${pwm.toStringAsFixed(1).padLeft(6)}',
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.8),
+            fontSize: 10,
+            fontFamily: 'monospace',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImuRow(String label, Map<String, dynamic> data) {
+    final value = switch (label) {
+      'Pitch' => (data['pitch'] as num?)?.toDouble() ?? 0,
+      'Roll' => (data['roll'] as num?)?.toDouble() ?? 0,
+      'Yaw' => (data['yaw'] as num?)?.toDouble() ?? 0,
+      _ => 0.0,
+    };
+    final color = switch (label) {
+      'Pitch' => Colors.redAccent,
+      'Roll' => Colors.greenAccent,
+      'Yaw' => Colors.orangeAccent,
+      _ => Colors.white,
+    };
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 40,
+          child: Text(
+            label,
+            style: TextStyle(color: color.withOpacity(0.7), fontSize: 10),
+          ),
+        ),
+        Text(
+          '${value.toStringAsFixed(1).padLeft(6)}°',
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.9),
+            fontSize: 10,
+            fontFamily: 'monospace',
+          ),
+        ),
+      ],
     );
   }
 }
