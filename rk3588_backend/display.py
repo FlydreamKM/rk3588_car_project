@@ -178,7 +178,7 @@ class CuteFaceDisplay:
 
     def set_emotion(self, emotion: str):
         """Set face emotion"""
-        valid = ["neutral", "happy", "sad", "angry", "surprised", "sleepy", "love", "cool"]
+        valid = ["neutral", "happy", "cool", "sleepy"]
         if emotion in valid:
             with self.lock:
                 self._target_emotion = emotion
@@ -333,67 +333,21 @@ class CuteFaceDisplay:
             right = [(26, 12), (27, 11), (28, 10), (29, 9), (30, 10), (31, 11), (32, 12)]
             return left + right
 
-        elif emotion == "sad":
-            # Inverted chevron vv
-            left = [(7, 9), (8, 10), (9, 11), (10, 12), (11, 11), (12, 10), (13, 9)]
-            right = [(26, 9), (27, 10), (28, 11), (29, 12), (30, 11), (31, 10), (32, 9)]
-            return left + right
-
-        elif emotion == "angry":
-            # Square eyes with cross detail (like reference image)
-            left = self._pixel_rect(7, 8, 6, 6)
-            left += self._pixel_line(7, 10, 12, 10)   # horizontal cross
-            left += self._pixel_line(9, 8, 9, 13)     # vertical cross
-            right = self._pixel_rect(26, 8, 6, 6)
-            right += self._pixel_line(26, 10, 31, 10)
-            right += self._pixel_line(28, 8, 28, 13)
-            return left + right
-
-        elif emotion == "surprised":
-            return self._pixel_rect(7, 7, 7, 7) + self._pixel_rect(26, 7, 7, 7)
+        elif emotion == "cool":
+            return self._pixel_rect(7, 9, 6, 3) + self._pixel_rect(26, 9, 6, 3)
 
         elif emotion == "sleepy":
             return self._pixel_rect(8, 10, 5, 1) + self._pixel_rect(27, 10, 5, 1)
-
-        elif emotion == "love":
-            # Heart-shaped eyes
-            left = [(8, 9), (10, 9), (7, 10), (8, 10), (9, 10), (10, 10), (11, 10),
-                    (8, 11), (9, 11), (10, 11), (9, 12)]
-            right = [(28, 9), (30, 9), (27, 10), (28, 10), (29, 10), (30, 10), (31, 10),
-                     (28, 11), (29, 11), (30, 11), (29, 12)]
-            return left + right
-
-        elif emotion == "cool":
-            return self._pixel_rect(7, 9, 6, 3) + self._pixel_rect(26, 9, 6, 3)
 
         return []
 
     def _get_brow_pixels(self, emotion: str) -> List[Tuple[int, int]]:
         """Get eyebrow pixel coordinates"""
-        if emotion == "angry":
-            # Angry: thick slanted brows (inner low, outer high)
-            left = self._pixel_line(5, 7, 14, 3) + self._pixel_line(5, 8, 14, 4)
-            right = self._pixel_line(25, 3, 34, 7) + self._pixel_line(25, 4, 34, 8)
-            return left + right
-
-        elif emotion == "sad":
-            # Sad: drooping brows
-            left = self._pixel_line(6, 4, 13, 7)
-            right = self._pixel_line(26, 7, 33, 4)
-            return left + right
-
-        elif emotion == "happy":
+        if emotion == "happy":
             # Happy: gentle raised brows
             left = self._pixel_line(6, 5, 13, 3)
             right = self._pixel_line(26, 3, 33, 5)
             return left + right
-
-        elif emotion == "surprised":
-            # Surprised: high arches
-            left = self._pixel_line(6, 4, 13, 2)
-            right = self._pixel_line(26, 2, 33, 4)
-            return left + right
-
         return []
 
     def _get_mouth_pixels(self, emotion: str) -> List[Tuple[int, int]]:
@@ -406,47 +360,16 @@ class CuteFaceDisplay:
             return [(14, 16), (15, 17), (16, 18), (17, 18), (18, 19), (19, 19),
                     (20, 19), (21, 19), (22, 18), (23, 18), (24, 17), (25, 16)]
 
-        elif emotion == "sad":
-            # Frown arc
-            return [(14, 18), (15, 17), (16, 16), (17, 16), (18, 15), (19, 15),
-                    (20, 15), (21, 15), (22, 16), (23, 16), (24, 17), (25, 18)]
-
-        elif emotion == "angry":
-            # Flat mouth with slight tension
-            return self._pixel_rect(14, 17, 13, 2)
-
-        elif emotion == "surprised":
-            return self._pixel_rect(17, 15, 7, 7)
+        elif emotion == "cool":
+            return self._pixel_rect(16, 17, 9, 1)
 
         elif emotion == "sleepy":
             return self._pixel_rect(17, 17, 7, 1)
-
-        elif emotion == "love":
-            return [(15, 17), (16, 18), (17, 18), (18, 18), (19, 18),
-                    (20, 18), (21, 18), (22, 18), (23, 17)]
-
-        elif emotion == "cool":
-            return self._pixel_rect(16, 17, 9, 1)
 
         return []
 
     def _get_cheek_pixels(self, emotion: str) -> List[Tuple[int, int]]:
         """Get decorative cheek pixels (hearts, etc.)"""
-        if emotion == "angry":
-            # Small hearts on cheeks (like reference image)
-            left = [(3, 13), (5, 13), (2, 14), (3, 14), (4, 14), (5, 14), (6, 14),
-                    (3, 15), (4, 15), (5, 15), (4, 16)]
-            right = [(34, 13), (36, 13), (33, 14), (34, 14), (35, 14), (36, 14), (37, 14),
-                     (34, 15), (35, 15), (36, 15), (35, 16)]
-            return left + right
-
-        elif emotion == "love":
-            left = [(3, 14), (5, 14), (2, 15), (3, 15), (4, 15), (5, 15), (6, 15),
-                    (3, 16), (4, 16), (5, 16), (4, 17)]
-            right = [(34, 14), (36, 14), (33, 15), (34, 15), (35, 15), (36, 15), (37, 15),
-                     (34, 16), (35, 16), (36, 16), (35, 17)]
-            return left + right
-
         return []
 
     def _get_bridge_pixels(self, emotion: str) -> List[Tuple[int, int]]:
@@ -457,11 +380,7 @@ class CuteFaceDisplay:
 
     def _emotion_color(self, emotion: str) -> Tuple[int, int, int]:
         """LED color per emotion"""
-        if emotion == "love":
-            return self.LED_LOVE
-        elif emotion == "angry":
-            return self.LED_ANGRY
-        elif emotion == "sleepy":
+        if emotion == "sleepy":
             return self.LED_SLEEPY
         return self.LED_COLOR
 
@@ -530,7 +449,7 @@ class CuteFaceDisplay:
 if __name__ == "__main__":
     display = CuteFaceDisplay()
     if display.init():
-        emotions = ["neutral", "happy", "love", "surprised", "cool", "sleepy", "sad", "angry"]
+        emotions = ["neutral", "happy", "cool", "sleepy"]
         idx = 0
         try:
             while True:

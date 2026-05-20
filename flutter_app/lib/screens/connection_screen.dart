@@ -165,14 +165,18 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
 
     // Fallback to SSH if available
     if (!apiSuccess && _isSshConnected) {
-      apiSuccess = await SshService.startRemoteServer();
+      final sshResult = await SshService.startRemoteServer();
+      apiSuccess = sshResult['success'] == true;
+      if (!apiSuccess && sshResult['logs'] != null) {
+        print('SSH start logs: ${sshResult['logs']}');
+      }
     }
 
     setState(() {
       _serverStarted = apiSuccess;
       _statusMessage = apiSuccess
-          ? '服务端启动命令已发送 ✅\n请等待 3-5 秒后进入控制面板'
-          : '服务端启动失败 ❌\n请手动检查 RK3588S';
+          ? '服务端启动成功 ✅\n请等待 1-2 秒后进入控制面板'
+          : '服务端启动失败 ❌\n请检查 RK3588S 终端日志';
       _isConnecting = false;
     });
 

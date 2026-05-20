@@ -144,17 +144,32 @@ class SshService {
     }
   }
 
-  static Future<bool> startRemoteServer() async {
-    if (_client == null) return false;
+  static Future<Map<String, dynamic>> startRemoteServer() async {
+    if (_client == null) return {'success': false, 'error': 'SSH not connected'};
     try {
       final command = _customStartCommand.isNotEmpty && _developerMode
           ? _customStartCommand
-          : 'cd ~/rk3588_car_project/rk3588_backend && nohup bash start.sh > /tmp/car_backend.log 2>&1 &';
-      final result = await _client!.run(command);
-      return true;
+          : 'cd ~/rk3588_car_project/rk3588_backend && setsid bash -c "nohup bash start.sh > /tmp/car_backend.log 2>&1" \u003e/dev/null 2\u003e\u00261 \u0026';
+      await _client!.run(command);
+
+      // Wait for backend to boot
+      await Future.delayed(Duration(seconds: 3));
+
+      // Check if port 5000 is actually listening
+      final check = await _client!.run('ss -tlnp | grep -q ":5000" \u0026\u0026 echo "OK" || echo "FAIL"');
+      final status = utf8.decode(check).trim();
+
+      if (status == "OK") {
+        return {'success': true};
+      }
+
+      // Port not open — fetch recent log for diagnosis
+      final logBytes = await _client!.run('tail -n 30 /tmp/car_backend.log 2\u003e/dev/null || echo "No log"');
+      final logs = utf8.decode(logBytes).trim();
+      return {'success': false, 'error': 'Backend did not start on port 5000', 'logs': logs};
     } catch (e) {
       print('SSH start server error: $e');
-      return false;
+      return {'success': false, 'error': e.toString()};
     }
   }
 
