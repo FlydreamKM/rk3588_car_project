@@ -31,6 +31,10 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
     final w = provider.cameraWidth;
     final h = provider.cameraHeight;
     _streamUrl = 'http://$ip:5000/video_feed?w=$w&h=$h';
+    // Reset cube centering when it was hidden and is now shown
+    if (!provider.showCube3D) {
+      _cubeInitialized = false;
+    }
   }
 
   @override
@@ -91,33 +95,7 @@ class _VideoStreamWidgetState extends State<VideoStreamWidget> {
             _buildImuHudOverlay(provider, context),
           // ── 3D Cube overlay (center, draggable) ──
           if (provider.showCube3D)
-            Builder(
-              builder: (context) {
-                final screenSize = MediaQuery.of(context).size;
-                if (!_cubeInitialized) {
-                  _cubeOffset = Offset(
-                    screenSize.width / 2 - 50,
-                    screenSize.height / 2 - 50,
-                  );
-                  _cubeInitialized = true;
-                }
-                return Positioned(
-                  left: _cubeOffset.dx,
-                  top: _cubeOffset.dy,
-                  child: GestureDetector(
-                    onPanUpdate: (details) {
-                      setState(() {
-                        _cubeOffset = Offset(
-                          _cubeOffset.dx + details.delta.dx,
-                          _cubeOffset.dy + details.delta.dy,
-                        );
-                      });
-                    },
-                    child: Cube3DWidget(size: 100),
-                  ),
-                );
-              },
-            ),
+            _buildDraggableCube(context, provider),
         ],
       );
     }
@@ -575,6 +553,47 @@ class ResolutionPicker extends StatelessWidget {
     );
   }
 }
+
+  // ── Draggable 3D Cube (screen-bounded) ──
+  Widget _buildDraggableCube(BuildContext context, RobotProvider provider) {
+    final screenSize = MediaQuery.of(context).size;
+    const cubeSize = 100.0;
+    // Initialize center if first show
+    if (!_cubeInitialized) {
+      _cubeOffset = Offset(
+        (screenSize.width - cubeSize) / 2,
+        (screenSize.height - cubeSize) / 2,
+      );
+      _cubeInitialized = true;
+    }
+    // Clamp to keep fully on-screen
+    _cubeOffset = Offset(
+      _cubeOffset.dx.clamp(0.0, screenSize.width - cubeSize),
+      _cubeOffset.dy.clamp(0.0, screenSize.height - cubeSize),
+    );
+
+    return Positioned(
+      left: _cubeOffset.dx,
+      top: _cubeOffset.dy,
+      child: GestureDetector(
+        onPanUpdate: (details) {
+          setState(() {
+            final newX = (_cubeOffset.dx + details.delta.dx)
+                .clamp(0.0, screenSize.width - cubeSize);
+            final newY = (_cubeOffset.dy + details.delta.dy)
+                .clamp(0.0, screenSize.height - cubeSize);
+            _cubeOffset = Offset(newX, newY);
+          });
+        },
+        child: Container(
+          width: cubeSize,
+          height: cubeSize,
+          alignment: Alignment.center,
+          child: Cube3DWidget(size: cubeSize),
+        ),
+      ),
+    );
+  }
 
 class _CrosshairPainter extends CustomPainter {
   @override
