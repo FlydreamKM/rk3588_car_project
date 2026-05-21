@@ -1,0 +1,4 @@
+# udev rule: allow all users to access PWM sysfs (OrangePi 5 / RK3588S)
+# This lets ./start.sh run without sudo for pygame display + PWM servo control
+SUBSYSTEM=="pwm", ACTION=="add", RUN+="/bin/chmod -R 777 /sys/class/pwm/%k"
+SUBSYSTEM=="pwm", ACTION=="change", RUN+="/bin/chmod -R 777 /sys/class/pwm/%k"

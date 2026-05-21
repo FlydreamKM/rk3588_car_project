@@ -1,8 +1,18 @@
 #!/bin/bash
 # RK3588S Smart Car Backend Startup Script
+# NOTE: Run WITHOUT sudo. PWM permissions are handled by udev rules.
+#       If PWM fails with permission denied, run: sudo bash install_pwm_permissions.sh
 set -e
 
 cd "$(dirname "$0")"
+
+# Check if running as root — warn but don't block (user may have udev rules)
+if [ "$(id -u)" -eq 0 ]; then
+    echo "[!] Running as root. pygame display may fail to connect to KDE."
+    echo "    Recommendation: run without sudo after installing PWM permissions:"
+    echo "    sudo bash install_pwm_permissions.sh"
+    echo ""
+fi
 
 # Kill any existing process on port 5000
 PORT_PID=$(ss -tlnp 2>/dev/null | grep ':5000' | grep -oP 'pid=\K[0-9]+' || true)
