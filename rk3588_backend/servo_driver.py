@@ -22,9 +22,9 @@ class ServoDriver:
     Tries sysfs PWM first, falls back to gpiod if available.
     """
 
-    SERVO_MID_DUTY = 157000       # Center (ns)
-    SERVO_R_LIMIT_DUTY = 15500    # Max right offset (ns)
-    SERVO_L_LIMIT_DUTY = 13500    # Max left offset (ns)
+    SERVO_MID_DUTY = 1500000      # Center 1.5ms (standard servo)
+    SERVO_R_LIMIT_DUTY = 500000   # Right limit +0.5ms → 2.0ms max
+    SERVO_L_LIMIT_DUTY = 500000   # Left limit  -0.5ms → 1.0ms min
 
     # Typical 50Hz servo: period = 20ms = 20000000 ns
     SERVO_PERIOD_NS = 20000000
@@ -137,6 +137,12 @@ class ServoDriver:
         else:
             # Left side: interpolate from center to center - L_LIMIT
             duty_ns = self.SERVO_MID_DUTY + int((angle_percent / 100.0) * self.SERVO_L_LIMIT_DUTY)
+
+        # Hard clamp to valid servo pulse range (1.0ms ~ 2.0ms)
+        # and ensure duty <= period to avoid sysfs write rejection
+        min_duty = 1000000   # 1.0ms
+        max_duty = min(self.SERVO_PERIOD_NS - 50000, 2000000)  # 2.0ms cap, keep margin below period
+        duty_ns = max(min_duty, min(duty_ns, max_duty))
 
         if self._use_gpiod:
             try:
