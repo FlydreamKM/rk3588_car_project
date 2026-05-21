@@ -25,28 +25,87 @@ from typing import Optional, List, Tuple
 # If DISPLAY is set, we're on a desktop (KDE/GNOME/X11) -> use x11
 # Otherwise try kmsdrm for direct HDMI
 def _auto_detect_display():
+    """Auto-detect display driver. Tries X11 first, then KMS/DRM fallback."""
+    # 1. If DISPLAY already set, use it
     if os.environ.get('DISPLAY'):
         os.environ['SDL_VIDEODRIVER'] = 'x11'
         print(f"[FaceDisplay] DISPLAY={os.environ['DISPLAY']} detected, using x11")
-    else:
-        # Try to auto-detect active X11 session (e.g., SSH start but KDE already running)
-        for display_num in ['0', '1', '2']:
-            if os.path.exists(f'/tmp/.X11-unix/X{display_num}'):
-                os.environ['DISPLAY'] = f':{display_num}'
-                os.environ['SDL_VIDEODRIVER'] = 'x11'
-                print(f"[FaceDisplay] Auto-detected DISPLAY=:{display_num} from /tmp/.X11-unix/X{display_num}")
-                break
-    if os.environ.get('SDL_VIDEODRIVER') == 'x11' or os.environ.get('DISPLAY'):
-        # Force pure software rendering — disable SDL's OpenGL framebuffer acceleration
-        os.environ['SDL_FRAMEBUFFER_ACCELERATION'] = '0'
-        os.environ['SDL_RENDER_DRIVER'] = 'software'
-        os.environ['SDL_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR'] = '1'
-        print("[FaceDisplay] Forced SOFTWARE render: SDL_FRAMEBUFFER_ACCELERATION=0, SDL_RENDER_DRIVER=software")
-    elif os.path.exists('/dev/dri/card0'):
+        _force_software_render()
+        return
+
+    # 2. Scan X11 sockets more aggressively (X0 ~ X9)
+    for display_num in ['1', '0', '2', '3', '4', '5', '6', '7', '8', '9']:
+        socket_path = f'/tmp/.X11-unix/X{display_num}'
+        if os.path.exists(socket_path):
+            os.environ['DISPLAY'] = f':{display_num}'
+            os.environ['SDL_VIDEODRIVER'] = 'x11'
+            print(f"[FaceDisplay] Auto-detected DISPLAY=:{display_num} from {socket_path}")
+            _force_software_render()
+            return
+
+    # 3. Try to infer from systemd user session (KDE/Plasma on Armbian)
+    try:
+        import subprocess as sp
+        # Check if any user has an active graphical session
+        result = sp.run(['loginctl', 'list-sessions', '--no-pager', '--no-legend'],
+                        capture_output=True, text=True, timeout=2)
+        for line in result.stdout.strip().split('\n'):
+            parts = line.split()
+            if len(parts) >= 4:
+                session_id = parts[0]
+                # Check session type
+                sinfo = sp.run(['loginctl', 'show-session', session_id, '-p', 'Type', '-p', 'Display', '-p', 'Remote'],
+                               capture_output=True, text=True, timeout=2)
+                session_type = ''
+                display = ''
+                for kv in sinfo.stdout.strip().split('\n'):
+                    if kv.startswith('Type='):
+                        session_type = kv.split('=', 1)[1]
+                    elif kv.startswith('Display='):
+                        display = kv.split('=', 1)[1]
+                if session_type == 'x11' and display:
+                    os.environ['DISPLAY'] = display
+                    os.environ['SDL_VIDEODRIVER'] = 'x11'
+                    print(f"[FaceDisplay] Auto-detected DISPLAY={display} from loginctl session {session_id}")
+                    _force_software_render()
+                    return
+    except Exception as e:
+        print(f"[FaceDisplay] loginctl detection failed: {e}")
+
+    # 4. Fallback: try to find DISPLAY from any running graphical process
+    try:
+        import subprocess as sp
+        # Search for processes with DISPLAY env var
+        result = sp.run(['ps', 'eww', '-o', 'command,environment'], capture_output=True, text=True, timeout=2)
+        for line in result.stdout.split('\n'):
+            if 'DISPLAY=' in line:
+                # Extract DISPLAY=... value
+                for part in line.split():
+                    if part.startswith('DISPLAY='):
+                        display_val = part.split('=', 1)[1]
+                        if display_val:
+                            os.environ['DISPLAY'] = display_val
+                            os.environ['SDL_VIDEODRIVER'] = 'x11'
+                            print(f"[FaceDisplay] Auto-detected DISPLAY={display_val} from running process env")
+                            _force_software_render()
+                            return
+    except Exception as e:
+        print(f"[FaceDisplay] Process env detection failed: {e}")
+
+    # 5. KMS/DRM fallback for direct HDMI (no desktop)
+    if os.path.exists('/dev/dri/card0'):
         os.environ['SDL_VIDEODRIVER'] = 'kmsdrm'
         print("[FaceDisplay] No X11 found, falling back to KMS/DRM")
-    else:
-        print("[FaceDisplay] No display driver available (no X11, no KMS/DRM)")
+        return
+
+    print("[FaceDisplay] No display driver available (no X11, no KMS/DRM)")
+
+def _force_software_render():
+    """Force pure software rendering to avoid Mali GL driver conflicts."""
+    os.environ['SDL_FRAMEBUFFER_ACCELERATION'] = '0'
+    os.environ['SDL_RENDER_DRIVER'] = 'software'
+    os.environ['SDL_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR'] = '1'
+    print("[FaceDisplay] Forced SOFTWARE render: SDL_FRAMEBUFFER_ACCELERATION=0, SDL_RENDER_DRIVER=software")
 
 _auto_detect_display()
 # Fallbacks: 'fbcon' for pure framebuffer, 'dummy' for headless

@@ -22,12 +22,12 @@ class ServoDriver:
     Tries sysfs PWM first, falls back to gpiod if available.
     """
 
-    SERVO_MID_DUTY = 1500000      # Center 1.5ms (standard servo)
-    SERVO_R_LIMIT_DUTY = 500000   # Right limit +0.5ms → 2.0ms max
-    SERVO_L_LIMIT_DUTY = 500000   # Left limit  -0.5ms → 1.0ms min
+    SERVO_MID_DUTY = 1454545       # Center 8% @ 55Hz (1.45ms)
+    SERVO_R_LIMIT_DUTY = 181818    # Right limit -1% → 7%
+    SERVO_L_LIMIT_DUTY = 181818    # Left limit  +1% → 9%
 
-    # Typical 50Hz servo: period = 20ms = 20000000 ns
-    SERVO_PERIOD_NS = 20000000
+    # 55Hz servo: period = 1/55s ≈ 18.18ms
+    SERVO_PERIOD_NS = 18181818
 
     def __init__(self, chip: int = None, channel: int = 0):
         self.chip = chip if chip is not None else int(os.environ.get('SERVO_PWM_CHIP', '4'))
@@ -131,17 +131,19 @@ class ServoDriver:
         # Clamp to [-100, 100]
         angle_percent = max(-100.0, min(100.0, angle_percent))
 
+        # Invert: user's servo wiring: larger duty = left turn
+        angle_percent = -angle_percent
+
         if angle_percent >= 0:
-            # Right side: interpolate from center to center + R_LIMIT
+            # Right side (user's wiring: smaller duty)
             duty_ns = self.SERVO_MID_DUTY + int((angle_percent / 100.0) * self.SERVO_R_LIMIT_DUTY)
         else:
-            # Left side: interpolate from center to center - L_LIMIT
+            # Left side (user's wiring: larger duty)
             duty_ns = self.SERVO_MID_DUTY + int((angle_percent / 100.0) * self.SERVO_L_LIMIT_DUTY)
 
-        # Hard clamp to valid servo pulse range (1.0ms ~ 2.0ms)
-        # and ensure duty <= period to avoid sysfs write rejection
-        min_duty = 1000000   # 1.0ms
-        max_duty = min(self.SERVO_PERIOD_NS - 50000, 2000000)  # 2.0ms cap, keep margin below period
+        # Hard clamp to user's exact range: 7% ~ 9% of period
+        min_duty = self.SERVO_MID_DUTY - self.SERVO_R_LIMIT_DUTY   # 7%
+        max_duty = self.SERVO_MID_DUTY + self.SERVO_L_LIMIT_DUTY   # 9%
         duty_ns = max(min_duty, min(duty_ns, max_duty))
 
         if self._use_gpiod:

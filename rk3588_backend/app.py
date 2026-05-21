@@ -50,7 +50,14 @@ tracking_connected = tracking_driver.connect()
 
 # ===================== Display =====================
 face_display = CuteFaceDisplay()
-display_connected = face_display.init()
+display_connected = False
+
+def _ensure_display():
+    """Lazy-init display on first use — avoids blocking Flask startup."""
+    global display_connected
+    if not display_connected and face_display is not None:
+        display_connected = face_display.init()
+    return display_connected
 
 # Try to connect to motor driver
 try:
@@ -449,7 +456,7 @@ def start_tracking_mode():
     """Enable line-tracking autonomous mode"""
     global robot_state
     robot_state["mode"] = "track"
-    if display_connected:
+    if _ensure_display():
         face_display.set_emotion("cool")
     return jsonify({"success": True, "mode": "track"})
 
@@ -460,7 +467,7 @@ def stop_tracking_mode():
     robot_state["mode"] = "manual"
     if motor_connected:
         _soft_stop_motor(255)
-    if display_connected:
+    if _ensure_display():
         face_display.set_emotion("neutral")
     return jsonify({"success": True, "mode": "manual"})
 
@@ -470,7 +477,7 @@ def set_display_emotion():
     """Set display emotion face"""
     emotion = request.json.get('emotion', 'neutral')
     robot_state["emotion"] = emotion
-    if display_connected:
+    if _ensure_display():
         face_display.set_emotion(emotion)
         return jsonify({"success": True, "emotion": emotion})
     return jsonify({"success": False, "error": "Display not connected", "emotion": emotion, "unavailable": True})
@@ -478,7 +485,7 @@ def set_display_emotion():
 @app.route('/api/display/status', methods=['GET'])
 def get_display_status():
     """Get display status"""
-    if display_connected:
+    if _ensure_display():
         return jsonify({"success": True, "data": face_display.get_state()})
     return jsonify({"success": False, "error": "Display not connected", "unavailable": True})
 
@@ -495,11 +502,21 @@ def ssh_start():
         backend_dir = os.path.dirname(os.path.abspath(__file__))
         start_script = os.path.join(backend_dir, "start.sh")
         if os.path.exists(start_script):
+            # Preserve DISPLAY so pygame can find X11 in the child process
+            env = os.environ.copy()
+            if not env.get('DISPLAY'):
+                # Try to auto-detect from sockets if not already set
+                for display_num in ['1', '0', '2', '3']:
+                    if os.path.exists(f'/tmp/.X11-unix/X{display_num}'):
+                        env['DISPLAY'] = f':{display_num}'
+                        print(f"[SSH Start] Injecting DISPLAY=:{display_num} for child process")
+                        break
             ssh_process = subprocess.Popen(
                 ["bash", start_script],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                cwd=backend_dir
+                cwd=backend_dir,
+                env=env,
             )
             ssh_start_time = time.time()
             robot_state["ssh"]["status"] = "running"
@@ -582,7 +599,7 @@ def set_mode():
     global robot_state
     mode = request.json.get('mode', 'manual')
     robot_state['mode'] = mode
-    if display_connected:
+    if _ensure_display():
         emotion_map = {
             "manual": "neutral",
             "auto": "cool",
@@ -717,7 +734,7 @@ def set_emotion():
     data = request.json or {}
     emotion = data.get('emotion', 'neutral')
     robot_state['emotion'] = emotion
-    if display_connected:
+    if _ensure_display():
         face_display.set_emotion(emotion)
     return jsonify({"success": True, "emotion": emotion})
 
@@ -801,7 +818,7 @@ if __name__ == '__main__':
     print(f"Servo:    {'Connected' if servo_connected else 'NOT AVAILABLE'} (pwmchip{SERVO_PWM_CHIP})")
     print(f"IMU:      {'Connected' if imu_connected else 'NOT AVAILABLE'} ({IMU_PORT})")
     print(f"Tracking: {'Connected' if tracking_connected else 'NOT AVAILABLE'} ({TRACKING_PORT})")
-    print(f"Display:  {'Connected' if display_connected else 'NOT AVAILABLE'}")
+    print(f"Display:  {'Connected' if display_connected else 'Lazy init (not yet started)'}")
     print(f"Camera:   {'OK' if camera.isOpened() else 'NOT AVAILABLE'}")
     print("API Endpoints:")
     print("  GET  /video_feed           - MJPEG video stream")
