@@ -1,6 +1,23 @@
 """
-Motor Driver Interface for Dual Closed-LOOP Driver (STM32F103)
-Binary protocol mode: [0xAA][0x55][LEN][CMD][DATA...][CHK]
+Motor Driver Interface using Vofa+ JustFloat Protocol
+
+Frame format (both uplink and downlink):
+    [0x7F][0x80][N floats * 4 bytes][0x7F][0x81]
+
+Command frame (7 channels, 32 bytes total):
+    ch0: cmd_type  (1.0=SET_TARGET, 2.0=SET_PID, 3.0=CONTROL, 4.0=REQ_STATUS)
+    ch1: motor_id  (0.0 / 1.0 / 255.0)
+    ch2: param0    (mode for target/pid; cmd_code for control)
+    ch3: param1    (speed or kp)
+    ch4: param2    (angle or ki)
+    ch5: param3    (accel or kd)
+    ch6: param4    (decel or 0)
+
+Status frame (10 channels, 44 bytes total):
+    ch0~4: motor1 [actual_speed, actual_angle, pwm, target_speed, target_angle]
+    ch5~9: motor2 [actual_speed, actual_angle, pwm, target_speed, target_angle]
+
+This lets VOFA+ on PC directly capture and plot motor waveforms.
 """
 
 import serial
@@ -11,150 +28,105 @@ import queue
 from typing import Callable, Optional, Dict, Any
 
 
-class MotorState:
-    """Motor state container"""
-    def __init__(self):
-        self.actual_speed = 0.0      # rad/s
-        self.actual_angle = 0.0      # rad
-        self.pwm = 0.0               # PWM value
-        self.target_speed = 0.0      # rad/s
-        self.target_angle = 0.0      # rad
-        self.timestamp = 0.0
-
-
-class BinaryFrameParser:
+class JustFloatFrameParser:
     """
-    Parse binary frames from STM32 motor driver.
-
-    Frame format:
-    [0xAA][0x55][LEN][CMD][DATA...][CHK]
-
-    Checksum: sum of CMD + all DATA bytes, low 8 bits
+    Parse JustFloat frames: [0x7F][0x80][N floats][0x7F][0x81]
     """
 
-    HEADER = bytes([0xAA, 0x55])
+    HEADER = bytes([0x7F, 0x80])
+    FOOTER = bytes([0x7F, 0x81])
 
-    # Response codes (uplink)
-    RSP_STATUS = 0x81
-
-    def __init__(self):
+    def __init__(self, num_channels: int = 10):
+        self.num_channels = num_channels
+        self.frame_size = 2 + num_channels * 4 + 2
         self.buffer = bytearray()
-        self.motor1 = MotorState()
-        self.motor2 = MotorState()
-        self.callback: Optional[Callable] = None
+        self.callback: Optional[Callable[[Dict], None]] = None
 
     def feed(self, data: bytes) -> list:
-        """Feed raw bytes and return list of parsed frames"""
+        """Feed raw bytes and return list of parsed status dicts"""
         self.buffer.extend(data)
         frames = []
 
         while True:
             header_idx = self.buffer.find(self.HEADER)
             if header_idx < 0:
+                # Keep last 256 bytes as partial frame
                 if len(self.buffer) > 256:
                     self.buffer = self.buffer[-256:]
                 break
 
-            # Need header(2) + LEN(1) + CMD(1) + CHK(1) = 5 bytes minimum
-            if len(self.buffer) - header_idx < 5:
+            # Need at least one full frame
+            if len(self.buffer) - header_idx < self.frame_size:
                 break
 
-            len_byte = self.buffer[header_idx + 2]
-            cmd = self.buffer[header_idx + 3]
+            frame = self.buffer[header_idx:header_idx + self.frame_size]
 
-            # Total frame: 2(header) + 1(len) + 1(cmd) + len(data) + 1(chk)
-            frame_size = 5 + len_byte
-            if len(self.buffer) - header_idx < frame_size:
-                break
+            # Verify footer
+            if frame[-2:] == self.FOOTER:
+                float_data = frame[2:-2]
+                if len(float_data) == self.num_channels * 4:
+                    floats = struct.unpack(f'<{self.num_channels}f', float_data)
+                    parsed = self._parse_status(floats)
+                    if parsed:
+                        frames.append(parsed)
+                        if self.callback:
+                            try:
+                                self.callback(parsed)
+                            except Exception as e:
+                                print(f"[Motor] Callback error: {e}")
 
-            frame = self.buffer[header_idx:header_idx + frame_size]
-
-            # Verify checksum: sum of CMD + DATA
-            payload = frame[3:-1]  # CMD + DATA
-            expected_chk = sum(payload) & 0xFF
-            actual_chk = frame[-1]
-
-            if expected_chk == actual_chk:
-                parsed = self._parse_frame(cmd, frame[4:-1])
-                if parsed:
-                    frames.append(parsed)
-
-            self.buffer = self.buffer[header_idx + frame_size:]
+            # Advance buffer past this frame
+            self.buffer = self.buffer[header_idx + self.frame_size:]
 
         return frames
 
-    def _parse_frame(self, cmd: int, data: bytes) -> Optional[Dict[str, Any]]:
-        """Parse a single frame based on command code"""
-        try:
-            if cmd == self.RSP_STATUS:
-                return self._parse_status(data)
+    def _parse_status(self, floats: tuple) -> Optional[Dict[str, Any]]:
+        """Parse 10-channel status frame into motor state dict"""
+        if len(floats) < 10:
             return None
-        except Exception as e:
-            print(f"Parse error for cmd 0x{cmd:02X}: {e}")
-            return None
-
-    def _parse_status(self, data: bytes) -> Optional[Dict[str, Any]]:
-        """Parse RSP_STATUS (0x81) frame — 10 floats = 40 bytes"""
-        if len(data) < 40:
-            return None
-
-        floats = struct.unpack('<10f', data[:40])
-
-        self.motor1.actual_speed = floats[0]
-        self.motor1.actual_angle = floats[1]
-        self.motor1.pwm = floats[2]
-        self.motor1.target_speed = floats[3]
-        self.motor1.target_angle = floats[4]
-        self.motor1.timestamp = time.time()
-
-        self.motor2.actual_speed = floats[5]
-        self.motor2.actual_angle = floats[6]
-        self.motor2.pwm = floats[7]
-        self.motor2.target_speed = floats[8]
-        self.motor2.target_angle = floats[9]
-        self.motor2.timestamp = time.time()
-
-        result = {
+        return {
             'motor1': {
                 'speed': floats[0],
                 'angle': floats[1],
                 'pwm': floats[2],
                 'target_speed': floats[3],
-                'target_angle': floats[4]
+                'target_angle': floats[4],
             },
             'motor2': {
                 'speed': floats[5],
                 'angle': floats[6],
                 'pwm': floats[7],
                 'target_speed': floats[8],
-                'target_angle': floats[9]
+                'target_angle': floats[9],
             },
             'timestamp': time.time()
         }
 
-        if self.callback:
-            self.callback(result)
-
-        return result
-
 
 class MotorDriver:
     """
-    High-level motor driver interface using binary protocol.
-    Frame: [0xAA][0x55][LEN][CMD][DATA...][CHK]
+    High-level motor driver using Vofa+ JustFloat protocol.
+    All commands and status use JustFloat frames for VOFA compatibility.
     """
 
-    # Command codes (downlink)
-    CMD_SET_TARGET = 0x01
-    CMD_SET_PID = 0x02
-    CMD_CONTROL = 0x03
-    CMD_REQ_STATUS = 0x04
+    # Command types (float values in command frame ch0)
+    CMD_SET_TARGET = 1.0
+    CMD_SET_PID = 2.0
+    CMD_CONTROL = 3.0
+    CMD_REQ_STATUS = 4.0
+
+    # Control codes (float values in command frame ch2 when CMD_CONTROL)
+    CTRL_ENABLE = 0.0
+    CTRL_DISABLE = 1.0
+    CTRL_HOME = 2.0
+    CTRL_EMERGENCY = 3.0
+    CTRL_CLEAR_FAULT = 4.0
 
     def __init__(self, port: str = '/dev/ttyACM0', baudrate: int = 115200):
         self.port = port
         self.baudrate = baudrate
         self.serial: Optional[serial.Serial] = None
-        self.parser = BinaryFrameParser()
+        self.parser = JustFloatFrameParser(num_channels=10)
         self.running = False
         self.read_thread: Optional[threading.Thread] = None
         self.callbacks: list[Callable] = []
@@ -163,11 +135,11 @@ class MotorDriver:
         self.command_queue: queue.Queue = queue.Queue()
         self.command_thread: Optional[threading.Thread] = None
 
-    def _build_frame(self, cmd: int, data: bytes) -> bytes:
-        """Build binary frame: [0xAA][0x55][LEN][CMD][DATA...][CHK]"""
-        payload = bytes([cmd]) + data
-        chk = sum(payload) & 0xFF
-        return bytes([0xAA, 0x55, len(data), cmd]) + data + bytes([chk])
+    def _build_cmd_frame(self, cmd_type: float, motor: float,
+                         p0: float, p1: float, p2: float, p3: float, p4: float) -> bytes:
+        """Build a JustFloat command frame (7 channels, 32 bytes)"""
+        payload = struct.pack('<7f', cmd_type, motor, p0, p1, p2, p3, p4)
+        return self.parser.HEADER + payload + self.parser.FOOTER
 
     def connect(self) -> bool:
         """Connect to motor driver via serial port"""
@@ -178,14 +150,14 @@ class MotorDriver:
                 bytesize=serial.EIGHTBITS,
                 parity=serial.PARITY_NONE,
                 stopbits=serial.STOPBITS_ONE,
-                timeout=0.1
+                timeout=0.05  # shorter timeout for faster polling
             )
             self.running = True
             self.read_thread = threading.Thread(target=self._read_loop, daemon=True)
             self.read_thread.start()
             self.command_thread = threading.Thread(target=self._command_loop, daemon=True)
             self.command_thread.start()
-            print(f"[Motor] Connected on {self.port}@{self.baudrate}")
+            print(f"[Motor] Connected on {self.port}@{self.baudrate} (JustFloat protocol)")
             return True
         except Exception as e:
             print(f"[Motor] Failed to connect: {e}")
@@ -203,11 +175,11 @@ class MotorDriver:
         print("[Motor] Disconnected")
 
     def _read_loop(self):
-        """Background thread: read and parse binary frames"""
+        """Background thread: read and parse JustFloat frames"""
         while self.running:
             try:
                 if self.serial and self.serial.is_open:
-                    data = self.serial.read(min(1024, self.serial.in_waiting or 1))
+                    data = self.serial.read(min(256, self.serial.in_waiting or 1))
                     if data:
                         frames = self.parser.feed(data)
                         if frames:
@@ -217,20 +189,20 @@ class MotorDriver:
                                 try:
                                     cb(frames[-1])
                                 except Exception as e:
-                                    print(f"Callback error: {e}")
+                                    print(f"[Motor] Callback error: {e}")
             except Exception as e:
                 print(f"[Motor] Read error: {e}")
                 time.sleep(0.01)
 
     def _command_loop(self):
-        """Background thread: send queued commands"""
+        """Background thread: send queued JustFloat command frames"""
         while self.running:
             try:
                 cmd = self.command_queue.get(timeout=0.1)
                 if self.serial and self.serial.is_open:
                     self.serial.write(cmd)
                     self.serial.flush()
-                    time.sleep(0.01)
+                    time.sleep(0.005)
             except queue.Empty:
                 continue
             except Exception as e:
@@ -243,53 +215,52 @@ class MotorDriver:
 
     def register_callback(self, callback: Callable):
         self.callbacks.append(callback)
+        self.parser.callback = callback
 
     def unregister_callback(self, callback: Callable):
         if callback in self.callbacks:
             self.callbacks.remove(callback)
 
-    def _send_raw(self, cmd: int, data: bytes):
-        """Queue a raw binary frame for transmission"""
-        frame = self._build_frame(cmd, data)
+    def _send_cmd(self, cmd_type: float, motor: float,
+                  p0: float, p1: float, p2: float, p3: float, p4: float):
+        """Queue a JustFloat command frame"""
+        frame = self._build_cmd_frame(cmd_type, motor, p0, p1, p2, p3, p4)
         self.command_queue.put(frame)
 
-    # === Binary Protocol API ===
+    # === JustFloat Protocol API ===
 
     def set_target(self, motor: int, mode: int, speed: float, angle: float,
                    accel: float, decel: float):
         """
-        CMD_SET_TARGET (0x01): Set motor target parameters
+        CMD_SET_TARGET (1.0): Set motor target parameters
         motor: 0 or 1
         mode: 0=speed mode, 1=position mode
         speed: rad/s, angle: rad, accel/decel: rad/s^2
-        Data: motor(1) + mode(1) + speed(4) + angle(4) + accel(4) + decel(4) = 14 bytes
         """
-        data = struct.pack('<B B f f f f', motor, mode, speed, angle, accel, decel)
-        self._send_raw(self.CMD_SET_TARGET, data)
+        self._send_cmd(self.CMD_SET_TARGET, float(motor),
+                       float(mode), float(speed), float(angle), float(accel), float(decel))
 
     def set_pid(self, motor: int, pid_type: int, kp: float, ki: float, kd: float):
         """
-        CMD_SET_PID (0x02): Set PID for a single motor
-        motor: 0 or 1 (DO NOT use 'B' — call twice for both motors)
+        CMD_SET_PID (2.0): Set PID for a single motor
+        motor: 0 or 1
         pid_type: 0=speed loop, 1=position loop
-        Data: motor(1) + pid_type(1) + kp(4) + ki(4) + kd(4) = 14 bytes
         """
-        data = struct.pack('<B B f f f', motor, pid_type, kp, ki, kd)
-        self._send_raw(self.CMD_SET_PID, data)
+        self._send_cmd(self.CMD_SET_PID, float(motor),
+                       float(pid_type), float(kp), float(ki), float(kd), 0.0)
 
     def control(self, motor: int, cmd_code: int):
         """
-        CMD_CONTROL (0x03): Control commands
+        CMD_CONTROL (3.0): Control commands
         motor: 0, 1, or 255 for both
         cmd_code: 0=ENABLE, 1=DISABLE, 2=HOME, 3=EMERGENCY, 4=CLEAR_FAULT
-        Data: motor(1) + cmd_code(1) = 2 bytes
         """
-        data = struct.pack('<B B', motor, cmd_code)
-        self._send_raw(self.CMD_CONTROL, data)
+        self._send_cmd(self.CMD_CONTROL, float(motor),
+                       float(cmd_code), 0.0, 0.0, 0.0, 0.0)
 
     def request_status(self):
-        """CMD_REQ_STATUS (0x04): Request status frame — no data"""
-        self._send_raw(self.CMD_REQ_STATUS, b'')
+        """CMD_REQ_STATUS (4.0): Request immediate status frame"""
+        self._send_cmd(self.CMD_REQ_STATUS, 255.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
     # === Convenience methods ===
 
