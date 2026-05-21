@@ -50,10 +50,22 @@ class RobotProvider extends ChangeNotifier {
   bool _motorHudLocked = false; // default unlocked (draggable)
   bool _imuHudLocked = false;   // default unlocked (draggable)
 
-  // Camera settings
-  int _cameraWidth = 640;
-  int _cameraHeight = 480;
-  List<Map<String, dynamic>> _cameraPresets = [];
+  // Motor limits (persisted)
+  double _motorSpeedLimit = 5.0;   // rad/s
+  double _motorAccelLimit = 10.0;  // rad/s^2
+
+  // PID parameters (persisted)
+  Map<String, double> _pidSpeed = {'kp': 2.0, 'ki': 0.5, 'kd': 0.0};
+  Map<String, double> _pidPosition = {'kp': 2.0, 'ki': 0.5, 'kd': 0.0};
+
+  static const String _prefMotorSpeedLimit = 'motor_speed_limit';
+  static const String _prefMotorAccelLimit = 'motor_accel_limit';
+  static const String _prefPidSpeedKp = 'pid_speed_kp';
+  static const String _prefPidSpeedKi = 'pid_speed_ki';
+  static const String _prefPidSpeedKd = 'pid_speed_kd';
+  static const String _prefPidPosKp = 'pid_pos_kp';
+  static const String _prefPidPosKi = 'pid_pos_ki';
+  static const String _prefPidPosKd = 'pid_pos_kd';
 
   static const String _prefServerIp = 'last_server_ip';
   static const String _prefHudOpacity = 'hud_opacity';
@@ -82,6 +94,11 @@ class RobotProvider extends ChangeNotifier {
   int get cameraWidth => _cameraWidth;
   int get cameraHeight => _cameraHeight;
   List<Map<String, dynamic>> get cameraPresets => _cameraPresets;
+
+  double get motorSpeedLimit => _motorSpeedLimit;
+  double get motorAccelLimit => _motorAccelLimit;
+  Map<String, double> get pidSpeed => Map.unmodifiable(_pidSpeed);
+  Map<String, double> get pidPosition => Map.unmodifiable(_pidPosition);
 
   double get screenWidth => _screenWidth;
   double get screenHeight => _screenHeight;
@@ -126,6 +143,16 @@ class RobotProvider extends ChangeNotifier {
       _imuHudY = (prefs.getDouble(_prefImuHudY) ?? 0.35).clamp(0.0, 0.9);
       _motorHudLocked = prefs.getBool(_prefMotorHudLocked) ?? false;
       _imuHudLocked = prefs.getBool(_prefImuHudLocked) ?? false;
+      // Motor limits
+      _motorSpeedLimit = prefs.getDouble(_prefMotorSpeedLimit) ?? 5.0;
+      _motorAccelLimit = prefs.getDouble(_prefMotorAccelLimit) ?? 10.0;
+      // PID params
+      _pidSpeed['kp'] = prefs.getDouble(_prefPidSpeedKp) ?? 2.0;
+      _pidSpeed['ki'] = prefs.getDouble(_prefPidSpeedKi) ?? 0.5;
+      _pidSpeed['kd'] = prefs.getDouble(_prefPidSpeedKd) ?? 0.0;
+      _pidPosition['kp'] = prefs.getDouble(_prefPidPosKp) ?? 2.0;
+      _pidPosition['ki'] = prefs.getDouble(_prefPidPosKi) ?? 0.5;
+      _pidPosition['kd'] = prefs.getDouble(_prefPidPosKd) ?? 0.0;
       notifyListeners();
     } catch (e) {
       debugPrint('Load saved settings error: $e');
@@ -150,6 +177,22 @@ class RobotProvider extends ChangeNotifier {
       await prefs.setBool(_prefImuHudLocked, _imuHudLocked);
     } catch (e) {
       debugPrint('Save HUD settings error: $e');
+    }
+  }
+
+  Future<void> _saveMotorSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_prefMotorSpeedLimit, _motorSpeedLimit);
+      await prefs.setDouble(_prefMotorAccelLimit, _motorAccelLimit);
+      await prefs.setDouble(_prefPidSpeedKp, _pidSpeed['kp']!);
+      await prefs.setDouble(_prefPidSpeedKi, _pidSpeed['ki']!);
+      await prefs.setDouble(_prefPidSpeedKd, _pidSpeed['kd']!);
+      await prefs.setDouble(_prefPidPosKp, _pidPosition['kp']!);
+      await prefs.setDouble(_prefPidPosKi, _pidPosition['ki']!);
+      await prefs.setDouble(_prefPidPosKd, _pidPosition['kd']!);
+    } catch (e) {
+      debugPrint('Save motor settings error: $e');
     }
   }
 
@@ -219,6 +262,59 @@ class RobotProvider extends ChangeNotifier {
     _motorHudLocked = v;
     _saveHudSettings();
     notifyListeners();
+  }
+
+  void setMotorSpeedLimit(double v) {
+    _motorSpeedLimit = v.clamp(0.1, 20.0);
+    _saveMotorSettings();
+    notifyListeners();
+  }
+
+  void setMotorAccelLimit(double v) {
+    _motorAccelLimit = v.clamp(0.1, 50.0);
+    _saveMotorSettings();
+    notifyListeners();
+  }
+
+  void setPidSpeed({required double kp, required double ki, required double kd}) {
+    _pidSpeed['kp'] = kp;
+    _pidSpeed['ki'] = ki;
+    _pidSpeed['kd'] = kd;
+    _saveMotorSettings();
+    notifyListeners();
+  }
+
+  void setPidPosition({required double kp, required double ki, required double kd}) {
+    _pidPosition['kp'] = kp;
+    _pidPosition['ki'] = ki;
+    _pidPosition['kd'] = kd;
+    _saveMotorSettings();
+    notifyListeners();
+  }
+
+  /// Apply motor limits to backend and persist
+  Future<void> applyMotorLimits() async {
+    try {
+      await ApiService.setMotorLimits(_motorSpeedLimit, _motorAccelLimit);
+    } catch (e) {
+      debugPrint('Apply motor limits error: $e');
+    }
+  }
+
+  /// Apply PID to motor and persist
+  Future<void> applyPid(int motor, int pidType) async {
+    try {
+      final pid = pidType == 0 ? _pidSpeed : _pidPosition;
+      await ApiService.setMotorPid(
+        motor: motor,
+        pidType: pidType,
+        kp: pid['kp']!,
+        ki: pid['ki']!,
+        kd: pid['kd']!,
+      );
+    } catch (e) {
+      debugPrint('Apply PID error: $e');
+    }
   }
 
   void setImuHudLocked(bool v) {

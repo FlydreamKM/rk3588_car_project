@@ -314,6 +314,82 @@ class _MainScreenState extends State<MainScreen> {
                 inactiveColor: Colors.purpleAccent.withOpacity(0.2),
                 onChanged: (v) => provider.setHudScale(v),
               ),
+              Divider(color: Colors.white.withOpacity(0.1), height: 16),
+              // Motor Limits
+              Text('电机限制', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text('速度限制 ${provider.motorSpeedLimit.toStringAsFixed(1)} rad/s', style: TextStyle(color: Colors.white70, fontSize: 10)),
+              Slider(
+                value: provider.motorSpeedLimit,
+                min: 0.1,
+                max: 10.0,
+                divisions: 99,
+                activeColor: Colors.orangeAccent,
+                inactiveColor: Colors.orangeAccent.withOpacity(0.2),
+                onChanged: (v) => provider.setMotorSpeedLimit(v),
+              ),
+              Text('加速度限制 ${provider.motorAccelLimit.toStringAsFixed(1)} rad/s²', style: TextStyle(color: Colors.white70, fontSize: 10)),
+              Slider(
+                value: provider.motorAccelLimit,
+                min: 0.1,
+                max: 30.0,
+                divisions: 299,
+                activeColor: Colors.orangeAccent,
+                inactiveColor: Colors.orangeAccent.withOpacity(0.2),
+                onChanged: (v) => provider.setMotorAccelLimit(v),
+              ),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => provider.applyMotorLimits(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orangeAccent.withOpacity(0.3),
+                    foregroundColor: Colors.orangeAccent,
+                    padding: EdgeInsets.symmetric(vertical: 6),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: Text('应用限制', style: TextStyle(fontSize: 11)),
+                ),
+              ),
+              Divider(color: Colors.white.withOpacity(0.1), height: 16),
+              // PID
+              Text('速度环 PID', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              _buildPidRow('Kp', provider.pidSpeed['kp']!, 0, 10, (v) => provider.setPidSpeed(kp: v, ki: provider.pidSpeed['ki']!, kd: provider.pidSpeed['kd']!)),
+              _buildPidRow('Ki', provider.pidSpeed['ki']!, 0, 5, (v) => provider.setPidSpeed(kp: provider.pidSpeed['kp']!, ki: v, kd: provider.pidSpeed['kd']!)),
+              _buildPidRow('Kd', provider.pidSpeed['kd']!, 0, 2, (v) => provider.setPidSpeed(kp: provider.pidSpeed['kp']!, ki: provider.pidSpeed['ki']!, kd: v)),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => provider.applyPid(255, 0),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.greenAccent.withOpacity(0.3),
+                    foregroundColor: Colors.greenAccent,
+                    padding: EdgeInsets.symmetric(vertical: 6),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: Text('应用速度环 PID', style: TextStyle(fontSize: 11)),
+                ),
+              ),
+              SizedBox(height: 12),
+              Text('位置环 PID', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              _buildPidRow('Kp', provider.pidPosition['kp']!, 0, 10, (v) => provider.setPidPosition(kp: v, ki: provider.pidPosition['ki']!, kd: provider.pidPosition['kd']!)),
+              _buildPidRow('Ki', provider.pidPosition['ki']!, 0, 5, (v) => provider.setPidPosition(kp: provider.pidPosition['kp']!, ki: v, kd: provider.pidPosition['kd']!)),
+              _buildPidRow('Kd', provider.pidPosition['kd']!, 0, 2, (v) => provider.setPidPosition(kp: provider.pidPosition['kp']!, ki: provider.pidPosition['ki']!, kd: v)),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => provider.applyPid(255, 1),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.greenAccent.withOpacity(0.3),
+                    foregroundColor: Colors.greenAccent,
+                    padding: EdgeInsets.symmetric(vertical: 6),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: Text('应用位置环 PID', style: TextStyle(fontSize: 11)),
+                ),
+              ),
               SizedBox(height: 20),
             ],
           ),
@@ -336,6 +412,24 @@ class _MainScreenState extends State<MainScreen> {
             activeColor: Colors.cyanAccent,
             activeTrackColor: Colors.cyanAccent.withOpacity(0.3),
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPidRow(String label, double value, double min, double max, ValueChanged<double> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('$label ${value.toStringAsFixed(2)}', style: TextStyle(color: Colors.white70, fontSize: 10)),
+        Slider(
+          value: value,
+          min: min,
+          max: max,
+          divisions: ((max - min) * 100).toInt(),
+          activeColor: Colors.greenAccent,
+          inactiveColor: Colors.greenAccent.withOpacity(0.2),
+          onChanged: onChanged,
         ),
       ],
     );

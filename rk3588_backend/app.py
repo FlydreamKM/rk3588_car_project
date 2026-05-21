@@ -69,7 +69,16 @@ except Exception as e:
     print(f"Motor driver not connected: {e}")
     print("Running in simulation mode")
 
-# ===================== Global Robot State =====================
+# ===================== Motor Limits =====================
+# Default motor limits (rad/s and rad/s^2)
+motor_speed_limit = 5.0   # Max speed for joystick scaling
+motor_accel_limit = 10.0  # Max acceleration/deceleration
+
+# ===================== PID Parameters (persisted by APP) =====================
+motor_pid_params = {
+    "speed": {"kp": 2.0, "ki": 0.5, "kd": 0.0},
+    "position": {"kp": 2.0, "ki": 0.5, "kd": 0.0},
+}
 robot_state = {
     "speed": 0,           # Current speed cm/s
     "heading": 0,         # Heading angle
@@ -84,6 +93,7 @@ robot_state = {
     "camera": {"fps": 0.0, "width": 640, "height": 480},
     "motor1": {"speed": 0, "angle": 0, "pwm": 0},
     "motor2": {"speed": 0, "angle": 0, "pwm": 0},
+    "motor_limits": {"speed": 5.0, "accel": 10.0},
     "servo": {"angle_percent": 0, "enabled": servo_connected},
     "tracking": {"ir_data": [0]*8, "error": 0, "pid_output": 0, "connected": tracking_connected},
     "ssh": {"status": "disconnected", "host": "", "uptime": 0},
@@ -567,16 +577,23 @@ def control():
     
     if motor_connected:
         try:
+            # Scale APP speed (0-100) by motor limits
+            actual_speed = speed * motor_speed_limit / 100.0
+            actual_accel = motor_accel_limit
             if action == 'forward':
-                motor_driver.set_car_speed(speed, 0)
+                motor_driver.set_target(0, 0, actual_speed, 0.0, actual_accel, actual_accel)
+                motor_driver.set_target(1, 0, actual_speed, 0.0, actual_accel, actual_accel)
             elif action == 'backward':
-                motor_driver.set_car_speed(-speed, 0)
+                motor_driver.set_target(0, 0, -actual_speed, 0.0, actual_accel, actual_accel)
+                motor_driver.set_target(1, 0, -actual_speed, 0.0, actual_accel, actual_accel)
             elif action == 'left':
-                motor_driver.set_car_speed(0, -speed * 0.1)
+                motor_driver.set_target(0, 0, -actual_speed * 0.5, 0.0, actual_accel, actual_accel)
+                motor_driver.set_target(1, 0, actual_speed * 0.5, 0.0, actual_accel, actual_accel)
                 if servo_connected:
                     servo_driver.set_angle(-50)
             elif action == 'right':
-                motor_driver.set_car_speed(0, speed * 0.1)
+                motor_driver.set_target(0, 0, actual_speed * 0.5, 0.0, actual_accel, actual_accel)
+                motor_driver.set_target(1, 0, -actual_speed * 0.5, 0.0, actual_accel, actual_accel)
                 if servo_connected:
                     servo_driver.set_angle(50)
             elif action == 'stop':
@@ -585,13 +602,13 @@ def control():
                     servo_driver.center()
             
             robot_state['status'] = 'running' if action != 'stop' else 'idle'
-            return jsonify({"success": True, "action": action, "speed": speed})
+            return jsonify({"success": True, "action": action, "speed": actual_speed, "limit": motor_speed_limit})
         except Exception as e:
             return jsonify({"success": False, "error": str(e)}), 500
     else:
-        robot_state['speed'] = speed if action != 'stop' else 0
+        robot_state['speed'] = speed * motor_speed_limit / 100.0 if action != 'stop' else 0
         robot_state['status'] = 'running' if action != 'stop' else 'idle'
-        return jsonify({"success": True, "action": action, "speed": speed, "mode": "simulation"})
+        return jsonify({"success": True, "action": action, "speed": speed * motor_speed_limit / 100.0, "mode": "simulation"})
 
 @app.route('/api/mode', methods=['POST'])
 def set_mode():
@@ -627,8 +644,12 @@ def set_motor_target():
     decel = data.get('decel', 10.0)
     
     try:
-        motor_driver.set_target(motor, mode, speed, angle, accel, decel)
-        return jsonify({"success": True, "motor": motor, "mode": mode, "speed": speed})
+        if motor == 255:
+            motor_driver.set_target(0, mode, speed, angle, accel, decel)
+            motor_driver.set_target(1, mode, speed, angle, accel, decel)
+        else:
+            motor_driver.set_target(motor, mode, speed, angle, accel, decel)
+        return jsonify({"success": True, "motor": motor, "mode": mode, "speed": speed, "accel": accel, "decel": decel})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -650,6 +671,21 @@ def set_motor_pid():
         return jsonify({"success": True, "motor": motor, "pid_type": pid_type, "kp": kp, "ki": ki, "kd": kd})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/motor/limits', methods=['POST'])
+def set_motor_limits():
+    """Set motor speed and acceleration limits (used by APP joystick scaling)"""
+    global motor_speed_limit, motor_accel_limit
+    data = request.json or {}
+    motor_speed_limit = data.get('speed', motor_speed_limit)
+    motor_accel_limit = data.get('accel', motor_accel_limit)
+    robot_state["motor_limits"] = {"speed": motor_speed_limit, "accel": motor_accel_limit}
+    return jsonify({"success": True, "speed_limit": motor_speed_limit, "accel_limit": motor_accel_limit})
+
+@app.route('/api/motor/limits', methods=['GET'])
+def get_motor_limits():
+    """Get current motor limits"""
+    return jsonify({"success": True, "speed_limit": motor_speed_limit, "accel_limit": motor_accel_limit})
 
 @app.route('/api/motor/enable', methods=['POST'])
 def motor_enable():

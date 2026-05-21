@@ -21,26 +21,44 @@ class _JoystickControlState extends State<JoystickControl> {
 
   void _sendCommand(double x, double y) {
     final provider = context.read<RobotProvider>();
-    
+    final speedLimit = provider.motorSpeedLimit;
+    final accelLimit = provider.motorAccelLimit;
+
     // Map joystick to action
     String action = 'stop';
-    int speed = (y.abs() * 100).toInt();
-    
+    double actualSpeed = y.abs() * speedLimit;
+
     if (y < -0.3) {
       action = 'forward';
     } else if (y > 0.3) {
       action = 'backward';
+      actualSpeed = -actualSpeed;
     } else if (x < -0.3) {
       action = 'left';
-      speed = (x.abs() * 100).toInt();
+      actualSpeed = x.abs() * speedLimit;
     } else if (x > 0.3) {
       action = 'right';
-      speed = (x.abs() * 100).toInt();
+      actualSpeed = x.abs() * speedLimit;
+    } else {
+      actualSpeed = 0;
     }
-    
-    if (action != _currentAction || speed > 5) {
+
+    if (action != _currentAction || actualSpeed.abs() > 0.05) {
       _currentAction = action;
-      provider.sendControl(action, speed: speed.clamp(0, 100));
+      // Send scaled motor targets with accel/decel limits
+      if (action == 'forward' || action == 'backward') {
+        provider.setMotorTarget(
+          motor: 255, mode: 0,
+          speed: actualSpeed, angle: 0,
+          accel: accelLimit, decel: accelLimit,
+        );
+      } else if (action == 'left') {
+        provider.setMotorTarget(motor: 0, mode: 0, speed: -actualSpeed * 0.5, angle: 0, accel: accelLimit, decel: accelLimit);
+        provider.setMotorTarget(motor: 1, mode: 0, speed: actualSpeed * 0.5, angle: 0, accel: accelLimit, decel: accelLimit);
+      } else if (action == 'right') {
+        provider.setMotorTarget(motor: 0, mode: 0, speed: actualSpeed * 0.5, angle: 0, accel: accelLimit, decel: accelLimit);
+        provider.setMotorTarget(motor: 1, mode: 0, speed: -actualSpeed * 0.5, angle: 0, accel: accelLimit, decel: accelLimit);
+      }
     }
 
     // Integrate servo steering with joystick X axis

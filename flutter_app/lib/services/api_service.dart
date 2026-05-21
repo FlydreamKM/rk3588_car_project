@@ -223,6 +223,19 @@ class ApiService {
   }
 
   // ===================== Camera =====================
+  static Future<Map<String, dynamic>> setMotorLimits(double speed, double accel) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/motor/limits'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'speed': speed, 'accel': accel}),
+    );
+    return jsonDecode(response.body);
+  }
+  
+  static Future<Map<String, dynamic>> getMotorLimits() async {
+    final response = await http.get(Uri.parse('$baseUrl/api/motor/limits'));
+    return jsonDecode(response.body);
+  }
   static Future<Map<String, dynamic>> getCameraInfo() async {
     final response = await http.get(Uri.parse('$baseUrl/api/camera/info'));
     return jsonDecode(response.body);
