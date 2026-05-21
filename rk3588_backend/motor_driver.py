@@ -1,23 +1,19 @@
 """
-Motor Driver Interface using Vofa+ JustFloat Protocol
+Motor Driver Interface — Vofa+ Mode
+- Downlink (RK3588S → STM32): FireWater text protocol
+- Uplink   (STM32 → RK3588S): JustFloat binary protocol
 
-Frame format (both uplink and downlink):
-    [0x7F][0x80][N floats * 4 bytes][0x7F][0x81]
+FireWater commands (ASCII + newline):
+    M <motor> <mode> <speed> <angle> <accel> <decel>   # set target
+    P <motor> <pid_type> <kp> <ki> <kd>                # set PID
+    C <motor> <code>                                    # control
+    V <interval_ms>                                     # set output freq
+    S                                                   # request status
 
-Command frame (7 channels, 32 bytes total):
-    ch0: cmd_type  (1.0=SET_TARGET, 2.0=SET_PID, 3.0=CONTROL, 4.0=REQ_STATUS)
-    ch1: motor_id  (0.0 / 1.0 / 255.0)
-    ch2: param0    (mode for target/pid; cmd_code for control)
-    ch3: param1    (speed or kp)
-    ch4: param2    (angle or ki)
-    ch5: param3    (accel or kd)
-    ch6: param4    (decel or 0)
-
-Status frame (10 channels, 44 bytes total):
-    ch0~4: motor1 [actual_speed, actual_angle, pwm, target_speed, target_angle]
-    ch5~9: motor2 [actual_speed, actual_angle, pwm, target_speed, target_angle]
-
-This lets VOFA+ on PC directly capture and plot motor waveforms.
+JustFloat status frame (binary):
+    [ch0..ch9 float32] + tail 0x00 0x00 0x80 0x7f
+    ch0~4 = motor1 [actual_speed, actual_angle, pwm, target_speed, target_angle]
+    ch5~9 = motor2 [actual_speed, actual_angle, pwm, target_speed, target_angle]
 """
 
 import serial
@@ -28,17 +24,22 @@ import queue
 from typing import Callable, Optional, Dict, Any
 
 
+# JustFloat tail: little-endian float NaN = bytes([0x00,0x00,0x80,0x7f])
+JUSTFLOAT_TAIL = struct.pack('<f', float('nan'))
+assert JUSTFLOAT_TAIL == b'\x00\x00\x80\x7f'
+
+
 class JustFloatFrameParser:
     """
-    Parse JustFloat frames: [0x7F][0x80][N floats][0x7F][0x81]
+    Parse JustFloat frames: N floats (4 bytes each) + tail (4 bytes).
+    No header. Tail = 0x00 0x00 0x80 0x7f.
     """
 
-    HEADER = bytes([0x7F, 0x80])
-    FOOTER = bytes([0x7F, 0x81])
+    TAIL = JUSTFLOAT_TAIL
+    NUM_CHANNELS = 10
+    FRAME_SIZE = NUM_CHANNELS * 4 + 4  # 44 bytes
 
-    def __init__(self, num_channels: int = 10):
-        self.num_channels = num_channels
-        self.frame_size = 2 + num_channels * 4 + 2
+    def __init__(self):
         self.buffer = bytearray()
         self.callback: Optional[Callable[[Dict], None]] = None
 
@@ -47,41 +48,40 @@ class JustFloatFrameParser:
         self.buffer.extend(data)
         frames = []
 
-        while True:
-            header_idx = self.buffer.find(self.HEADER)
-            if header_idx < 0:
-                # Keep last 256 bytes as partial frame
-                if len(self.buffer) > 256:
-                    self.buffer = self.buffer[-256:]
+        while len(self.buffer) >= self.FRAME_SIZE:
+            # Search for tail
+            tail_idx = self.buffer.find(self.TAIL)
+            if tail_idx < 0:
+                # Keep last frame_size-1 bytes in case tail is split
+                if len(self.buffer) > self.FRAME_SIZE * 2:
+                    self.buffer = self.buffer[-(self.FRAME_SIZE - 1):]
                 break
 
-            # Need at least one full frame
-            if len(self.buffer) - header_idx < self.frame_size:
+            # Data starts at tail_idx - NUM_CHANNELS*4
+            data_start = tail_idx - self.NUM_CHANNELS * 4
+            if data_start < 0:
+                # Partial frame, keep from data_start and break
+                self.buffer = self.buffer[data_start:]
                 break
 
-            frame = self.buffer[header_idx:header_idx + self.frame_size]
+            float_data = self.buffer[data_start:tail_idx]
+            if len(float_data) == self.NUM_CHANNELS * 4:
+                floats = struct.unpack(f'<{self.NUM_CHANNELS}f', float_data)
+                parsed = self._parse_status(floats)
+                if parsed:
+                    frames.append(parsed)
+                    if self.callback:
+                        try:
+                            self.callback(parsed)
+                        except Exception as e:
+                            print(f"[Motor] Callback error: {e}")
 
-            # Verify footer
-            if frame[-2:] == self.FOOTER:
-                float_data = frame[2:-2]
-                if len(float_data) == self.num_channels * 4:
-                    floats = struct.unpack(f'<{self.num_channels}f', float_data)
-                    parsed = self._parse_status(floats)
-                    if parsed:
-                        frames.append(parsed)
-                        if self.callback:
-                            try:
-                                self.callback(parsed)
-                            except Exception as e:
-                                print(f"[Motor] Callback error: {e}")
-
-            # Advance buffer past this frame
-            self.buffer = self.buffer[header_idx + self.frame_size:]
+            # Advance past this frame
+            self.buffer = self.buffer[tail_idx + len(self.TAIL):]
 
         return frames
 
     def _parse_status(self, floats: tuple) -> Optional[Dict[str, Any]]:
-        """Parse 10-channel status frame into motor state dict"""
         if len(floats) < 10:
             return None
         return {
@@ -105,28 +105,14 @@ class JustFloatFrameParser:
 
 class MotorDriver:
     """
-    High-level motor driver using Vofa+ JustFloat protocol.
-    All commands and status use JustFloat frames for VOFA compatibility.
+    FireWater commands downlink + JustFloat status uplink.
     """
-
-    # Command types (float values in command frame ch0)
-    CMD_SET_TARGET = 1.0
-    CMD_SET_PID = 2.0
-    CMD_CONTROL = 3.0
-    CMD_REQ_STATUS = 4.0
-
-    # Control codes (float values in command frame ch2 when CMD_CONTROL)
-    CTRL_ENABLE = 0.0
-    CTRL_DISABLE = 1.0
-    CTRL_HOME = 2.0
-    CTRL_EMERGENCY = 3.0
-    CTRL_CLEAR_FAULT = 4.0
 
     def __init__(self, port: str = '/dev/ttyACM0', baudrate: int = 115200):
         self.port = port
         self.baudrate = baudrate
         self.serial: Optional[serial.Serial] = None
-        self.parser = JustFloatFrameParser(num_channels=10)
+        self.parser = JustFloatFrameParser()
         self.running = False
         self.read_thread: Optional[threading.Thread] = None
         self.callbacks: list[Callable] = []
@@ -135,14 +121,17 @@ class MotorDriver:
         self.command_queue: queue.Queue = queue.Queue()
         self.command_thread: Optional[threading.Thread] = None
 
-    def _build_cmd_frame(self, cmd_type: float, motor: float,
-                         p0: float, p1: float, p2: float, p3: float, p4: float) -> bytes:
-        """Build a JustFloat command frame (7 channels, 32 bytes)"""
-        payload = struct.pack('<7f', cmd_type, motor, p0, p1, p2, p3, p4)
-        return self.parser.HEADER + payload + self.parser.FOOTER
+    # ── FireWater text helpers ──
+
+    def _send_text(self, text: str):
+        """Queue a FireWater text command (ASCII + newline)"""
+        if not text.endswith('\n'):
+            text += '\n'
+        self.command_queue.put(text.encode('ascii'))
+
+    # ── Connection ──
 
     def connect(self) -> bool:
-        """Connect to motor driver via serial port"""
         try:
             self.serial = serial.Serial(
                 port=self.port,
@@ -150,21 +139,20 @@ class MotorDriver:
                 bytesize=serial.EIGHTBITS,
                 parity=serial.PARITY_NONE,
                 stopbits=serial.STOPBITS_ONE,
-                timeout=0.05  # shorter timeout for faster polling
+                timeout=0.05
             )
             self.running = True
             self.read_thread = threading.Thread(target=self._read_loop, daemon=True)
             self.read_thread.start()
             self.command_thread = threading.Thread(target=self._command_loop, daemon=True)
             self.command_thread.start()
-            print(f"[Motor] Connected on {self.port}@{self.baudrate} (JustFloat protocol)")
+            print(f"[Motor] Connected on {self.port}@{self.baudrate} (FireWater↓ / JustFloat↑)")
             return True
         except Exception as e:
             print(f"[Motor] Failed to connect: {e}")
             return False
 
     def disconnect(self):
-        """Disconnect from motor driver"""
         self.running = False
         if self.read_thread:
             self.read_thread.join(timeout=1.0)
@@ -195,7 +183,7 @@ class MotorDriver:
                 time.sleep(0.01)
 
     def _command_loop(self):
-        """Background thread: send queued JustFloat command frames"""
+        """Background thread: send queued FireWater text commands"""
         while self.running:
             try:
                 cmd = self.command_queue.get(timeout=0.1)
@@ -209,7 +197,6 @@ class MotorDriver:
                 print(f"[Motor] Command error: {e}")
 
     def get_state(self) -> Optional[Dict]:
-        """Get latest parsed motor state"""
         with self.lock:
             return self.latest_state.copy() if self.latest_state else None
 
@@ -221,79 +208,53 @@ class MotorDriver:
         if callback in self.callbacks:
             self.callbacks.remove(callback)
 
-    def _send_cmd(self, cmd_type: float, motor: float,
-                  p0: float, p1: float, p2: float, p3: float, p4: float):
-        """Queue a JustFloat command frame"""
-        frame = self._build_cmd_frame(cmd_type, motor, p0, p1, p2, p3, p4)
-        self.command_queue.put(frame)
-
-    # === JustFloat Protocol API ===
+    # ── FireWater API ──
 
     def set_target(self, motor: int, mode: int, speed: float, angle: float,
                    accel: float, decel: float):
-        """
-        CMD_SET_TARGET (1.0): Set motor target parameters
-        motor: 0 or 1
-        mode: 0=speed mode, 1=position mode
-        speed: rad/s, angle: rad, accel/decel: rad/s^2
-        """
-        self._send_cmd(self.CMD_SET_TARGET, float(motor),
-                       float(mode), float(speed), float(angle), float(accel), float(decel))
+        """M <motor> <mode> <speed> <angle> <accel> <decel>"""
+        self._send_text(f"M {motor} {mode} {speed} {angle} {accel} {decel}")
 
     def set_pid(self, motor: int, pid_type: int, kp: float, ki: float, kd: float):
-        """
-        CMD_SET_PID (2.0): Set PID for a single motor
-        motor: 0 or 1
-        pid_type: 0=speed loop, 1=position loop
-        """
-        self._send_cmd(self.CMD_SET_PID, float(motor),
-                       float(pid_type), float(kp), float(ki), float(kd), 0.0)
+        """P <motor> <pid_type> <kp> <ki> <kd>"""
+        self._send_text(f"P {motor} {pid_type} {kp} {ki} {kd}")
 
     def control(self, motor: int, cmd_code: int):
-        """
-        CMD_CONTROL (3.0): Control commands
-        motor: 0, 1, or 255 for both
-        cmd_code: 0=ENABLE, 1=DISABLE, 2=HOME, 3=EMERGENCY, 4=CLEAR_FAULT
-        """
-        self._send_cmd(self.CMD_CONTROL, float(motor),
-                       float(cmd_code), 0.0, 0.0, 0.0, 0.0)
+        """C <motor> <code>   (0=ENABLE,1=DISABLE,2=HOME,3=EMERGENCY,4=CLEAR_FAULT)"""
+        self._send_text(f"C {motor} {cmd_code}")
+
+    def set_output_freq(self, interval_ms: int):
+        """V <interval_ms>   e.g. V 5 → 200Hz output"""
+        self._send_text(f"V {interval_ms}")
 
     def request_status(self):
-        """CMD_REQ_STATUS (4.0): Request immediate status frame"""
-        self._send_cmd(self.CMD_REQ_STATUS, 255.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        """S"""
+        self._send_text("S")
 
-    # === Convenience methods ===
+    # ── Convenience methods ──
 
     def enable(self, motor: int = 255):
-        """Enable motor(s)"""
         self.control(motor, 0)
 
     def disable(self, motor: int = 255):
-        """Disable motor(s)"""
         self.control(motor, 1)
 
     def emergency_stop(self, motor: int = 255):
-        """Emergency stop (hard stop)"""
         self.control(motor, 3)
 
     def clear_fault(self, motor: int = 255):
-        """Clear fault and return to IDLE"""
         self.control(motor, 4)
 
     def home(self, motor: int = 255):
-        """Home (reset encoder and trajectory)"""
         self.control(motor, 2)
 
     def set_speed(self, motor: int, speed: float, accel: float = 10.0):
-        """Set speed mode target"""
         self.set_target(motor, 0, speed, 0.0, accel, accel)
 
     def set_position(self, motor: int, angle: float, speed: float = 2.0, accel: float = 5.0):
-        """Set position mode target"""
         self.set_target(motor, 1, speed, angle, accel, accel)
 
     def set_car_speed(self, linear: float, angular: float):
-        """Set differential drive speed (left/right wheel speeds)"""
         left_speed = linear - angular * 5.0
         right_speed = linear + angular * 5.0
         self.set_speed(0, left_speed)
