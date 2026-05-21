@@ -39,7 +39,9 @@ class ServoDriver:
         self.pwm_base = ""
         self.pwm_path = ""
         self.enabled = False
-        self.current_duty = self.SERVO_MID_DUTY
+        # Initialize center position using inverted duty for sysfs
+        initial_duty = int(self.SERVO_PERIOD_NS * (1.0 - self.SERVO_CENTER_RATIO))
+        self.current_duty = initial_duty
         self._gpiod_chip = None
         self._gpiod_line = None
         self._use_gpiod = False
