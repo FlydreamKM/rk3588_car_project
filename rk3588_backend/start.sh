@@ -35,10 +35,11 @@ fi
 
 source venv/bin/activate
 
-echo "Installing dependencies..."
-# --prefer-binary: avoid compiling from source when wheels exist
-# --upgrade: ensure versions match requirements.txt
-pip install --prefer-binary --upgrade -r requirements.txt
+echo "Checking dependencies..."
+# Only install if missing (avoid --upgrade which re-checks everything)
+if ! python -c "import flask, flask_cors, cv2, numpy, pygame" 2>/dev/null; then
+    pip install --prefer-binary -r requirements.txt
+fi
 
 # Set ports from environment or use defaults
 # Wiring: IMU=ttyUSB0, Motor=ttyACM0, Tracking=ttyUSB1
@@ -60,18 +61,22 @@ echo "Press Ctrl+C to stop"
 python app.py &
 APP_PID=$!
 
-# Wait for backend to bind port 5000 (max 30s)
-for i in {1..30}; do
-    sleep 1
+# Wait for backend to bind port 5000 (max 10s, with 0.2s interval = 50 checks)
+echo -n "Waiting for backend "
+for i in {1..50}; do
+    sleep 0.2
     if ss -tlnp 2>/dev/null | grep -q ":5000"; then
+        echo ""
         echo "[DONE] RK3588S Backend Ready on port 5000"
         break
     fi
+    echo -n "."
 done
 
 # If still not listening, report error
 if ! ss -tlnp 2>/dev/null | grep -q ":5000"; then
-    echo "[ERROR] Backend failed to start within 30 seconds"
+    echo ""
+    echo "[ERROR] Backend failed to start within 10 seconds"
     kill $APP_PID 2>/dev/null || true
     exit 1
 fi

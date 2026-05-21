@@ -835,4 +835,14 @@ if __name__ == '__main__':
     print("  POST /api/ssh/start        - One-click start backend")
     print("=" * 50)
     
+    # Auto-init display after Flask starts (non-blocking)
+    def _auto_init_display():
+        time.sleep(2.0)  # Give Flask a moment to bind port
+        if _ensure_display():
+            face_display.set_emotion("neutral")
+            print("[Startup] Display auto-initialized with neutral face")
+        else:
+            print("[Startup] Display not available (no X11 / no HDMI)")
+    threading.Thread(target=_auto_init_display, daemon=True).start()
+
     app.run(host='0.0.0.0', port=5000, threaded=True)
