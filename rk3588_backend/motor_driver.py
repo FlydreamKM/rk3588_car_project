@@ -24,9 +24,8 @@ import queue
 from typing import Callable, Optional, Dict, Any
 
 
-# JustFloat tail: little-endian float NaN = bytes([0x00,0x00,0x80,0x7f])
-JUSTFLOAT_TAIL = struct.pack('<f', float('nan'))
-assert JUSTFLOAT_TAIL == b'\x00\x00\x80\x7f'
+# JustFloat tail: little-endian NaN = bytes([0x00,0x00,0x80,0x7f])
+JUSTFLOAT_TAIL = b'\x00\x00\x80\x7f'
 
 
 class JustFloatFrameParser:
