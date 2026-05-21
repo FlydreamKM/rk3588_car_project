@@ -107,7 +107,29 @@ def _force_software_render():
     os.environ['SDL_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR'] = '1'
     print("[FaceDisplay] Forced SOFTWARE render: SDL_FRAMEBUFFER_ACCELERATION=0, SDL_RENDER_DRIVER=software")
 
+def _fix_x11_auth():
+    """Try to fix X11 authorization when running as root/sudo."""
+    import subprocess as sp
+    import pwd
+    
+    # If we're root, try to borrow the logged-in user's X authority
+    if os.geteuid() == 0:
+        # Find the first non-root user with a graphical session
+        try:
+            for user in pwd.getpwall():
+                if user.pw_uid >= 1000:  # Regular user
+                    home = user.pw_dir
+                    xauth_file = os.path.join(home, '.Xauthority')
+                    if os.path.exists(xauth_file):
+                        os.environ['XAUTHORITY'] = xauth_file
+                        print(f"[FaceDisplay] Set XAUTHORITY={xauth_file} for root X11 access")
+                        return True
+        except Exception as e:
+            print(f"[FaceDisplay] X auth fix failed: {e}")
+    return False
+
 _auto_detect_display()
+_fix_x11_auth()
 # Fallbacks: 'fbcon' for pure framebuffer, 'dummy' for headless
 
 import pygame

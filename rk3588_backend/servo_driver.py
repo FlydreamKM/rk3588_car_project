@@ -22,12 +22,16 @@ class ServoDriver:
     Tries sysfs PWM first, falls back to gpiod if available.
     """
 
-    SERVO_MID_DUTY = 1454545       # Center 8% @ 55Hz (1.45ms)
-    SERVO_R_LIMIT_DUTY = 181818    # Right limit -1% → 7%
-    SERVO_L_LIMIT_DUTY = 181818    # Left limit  +1% → 9%
-
     # 55Hz servo: period = 1/55s ≈ 18.18ms
     SERVO_PERIOD_NS = 18181818
+
+    # User's servo: duty_ratio 8%=center, 9%=left limit, 7%=right limit
+    # sysfs on this platform has INVERTED output (measured 92% when writing 8%)
+    # So we write period * (1 - target_ratio) to sysfs
+    SERVO_CENTER_RATIO = 0.08   # 8% center
+    SERVO_DELTA_RATIO = 0.01    # ±1% from center to limits
+    SERVO_MIN_RATIO = 0.07      # 7% right limit
+    SERVO_MAX_RATIO = 0.09      # 9% left limit
 
     def __init__(self, chip: int = None, channel: int = 0):
         self.chip = chip if chip is not None else int(os.environ.get('SERVO_PWM_CHIP', '4'))
@@ -69,8 +73,8 @@ class ServoDriver:
             from periphery import PWM
             # Common OrangePi 5 mappings: chip=0, channel varies by pin
             pwm = PWM(self.chip, self.channel)
-            pwm.frequency = 50          # 50Hz
-            pwm.duty_cycle = 0.075      # 1.5ms / 20ms = 7.5% center
+            pwm.frequency = 55          # 55Hz to match user's servo
+            pwm.duty_cycle = 1.0 - self.SERVO_CENTER_RATIO  # 92% = 8% inverted
             pwm.enable = True
             self._gpiod_pwm = pwm
             self._use_gpiod = True
@@ -97,16 +101,17 @@ class ServoDriver:
                     self._write_sysfs(export_path, str(self.channel))
                     time.sleep(0.3)
 
-                # Set period (20ms for 50Hz servo)
+                # Set period (18.18ms for 55Hz servo)
                 self._write_sysfs(f"{self.pwm_path}/period", str(self.SERVO_PERIOD_NS))
-                # Set initial duty to center
-                self._write_sysfs(f"{self.pwm_path}/duty_cycle", str(self.SERVO_MID_DUTY))
+                # Set initial duty: inverted, so write 92% to get 8% output
+                initial_duty = int(self.SERVO_PERIOD_NS * (1.0 - self.SERVO_CENTER_RATIO))
+                self._write_sysfs(f"{self.pwm_path}/duty_cycle", str(initial_duty))
                 # Enable PWM
                 self._write_sysfs(f"{self.pwm_path}/enable", "1")
                 self.enabled = True
-                self.current_duty = self.SERVO_MID_DUTY
+                self.current_duty = initial_duty
                 print(f"[Servo] PWM initialized: chip={chip}, channel={self.channel}")
-                print(f"[Servo] Center={self.SERVO_MID_DUTY}ns, Right=+{self.SERVO_R_LIMIT_DUTY}ns, Left=-{self.SERVO_L_LIMIT_DUTY}ns")
+                print(f"[Servo] Period={self.SERVO_PERIOD_NS}ns, Center ratio={self.SERVO_CENTER_RATIO}, Inverted output")
                 return True
             except Exception as e:
                 print(f"[Servo] Sysfs PWM init failed: {e}")
@@ -131,19 +136,22 @@ class ServoDriver:
         # Clamp to [-100, 100]
         angle_percent = max(-100.0, min(100.0, angle_percent))
 
-        # Invert: user's servo wiring: larger duty = left turn
-        angle_percent = -angle_percent
+        # Convert angle to target duty ratio:
+        #   -100 (left)  → 9%  (larger duty)
+        #     +0 (center) → 8%
+        #  +100 (right)  → 7%  (smaller duty)
+        target_ratio = self.SERVO_CENTER_RATIO - (angle_percent / 100.0) * self.SERVO_DELTA_RATIO
 
-        if angle_percent >= 0:
-            # Right side (user's wiring: smaller duty)
-            duty_ns = self.SERVO_MID_DUTY + int((angle_percent / 100.0) * self.SERVO_R_LIMIT_DUTY)
-        else:
-            # Left side (user's wiring: larger duty)
-            duty_ns = self.SERVO_MID_DUTY + int((angle_percent / 100.0) * self.SERVO_L_LIMIT_DUTY)
+        # Clamp to safe limits [7%, 9%]
+        target_ratio = max(self.SERVO_MIN_RATIO, min(self.SERVO_MAX_RATIO, target_ratio))
 
-        # Hard clamp to user's exact range: 7% ~ 9% of period
-        min_duty = self.SERVO_MID_DUTY - self.SERVO_R_LIMIT_DUTY   # 7%
-        max_duty = self.SERVO_MID_DUTY + self.SERVO_L_LIMIT_DUTY   # 9%
+        # INVERTED output: sysfs duty_cycle controls LOW time on this platform
+        # Measured: writing 8% produces 92% on scope → write (1 - target)
+        duty_ns = int(self.SERVO_PERIOD_NS * (1.0 - target_ratio))
+
+        # Final safety clamp: keep within [91%, 93%] of period for sysfs
+        min_duty = int(self.SERVO_PERIOD_NS * (1.0 - self.SERVO_MAX_RATIO))  # 91%
+        max_duty = int(self.SERVO_PERIOD_NS * (1.0 - self.SERVO_MIN_RATIO))  # 93%
         duty_ns = max(min_duty, min(duty_ns, max_duty))
 
         if self._use_gpiod:
@@ -182,9 +190,10 @@ class ServoDriver:
         return {
             "enabled": self.enabled,
             "current_duty_ns": self.current_duty,
-            "center_duty_ns": self.SERVO_MID_DUTY,
-            "right_limit_ns": self.SERVO_R_LIMIT_DUTY,
-            "left_limit_ns": self.SERVO_L_LIMIT_DUTY,
+            "period_ns": self.SERVO_PERIOD_NS,
+            "center_ratio": self.SERVO_CENTER_RATIO,
+            "left_ratio": self.SERVO_MAX_RATIO,
+            "right_ratio": self.SERVO_MIN_RATIO,
         }
 
 
