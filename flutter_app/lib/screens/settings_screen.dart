@@ -29,7 +29,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _imuLoading = false;
   String _imuVersion = '未知';
 
-  // Calibration state
+  bool _settingsLoaded = false;
   bool _calibrating = false;
   String _calibrationStatus = '';
 
@@ -50,14 +50,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final Map<String, TextEditingController> _pidKd = {};
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_settingsLoaded) {
+      _settingsLoaded = true;
+      _loadSettings();
+    }
+  }
+
+  @override
   void initState() {
     super.initState();
-    _loadSettings();
     for (final cfg in _pidControllers) {
       final key = '${cfg['motor']}_${cfg['pid_type']}';
-      _pidKp[key] = TextEditingController(text: '2.0');
-      _pidKi[key] = TextEditingController(text: '0.5');
-      _pidKd[key] = TextEditingController(text: '0.0');
+      _pidKp[key] = TextEditingController();
+      _pidKi[key] = TextEditingController();
+      _pidKd[key] = TextEditingController();
     }
     _fetchImuData();
     _fetchImuVersion();
@@ -136,10 +144,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _developerMode = creds['developerMode'] as bool? ?? false;
       _commandController.text = creds['customStartCommand'] as String? ?? '';
     });
-    // Load motor limits from provider (which reads from SharedPreferences)
     final provider = context.read<RobotProvider>();
     _maxSpeedController.text = provider.motorSpeedLimit.toStringAsFixed(1);
     _maxAccelController.text = provider.motorAccelLimit.toStringAsFixed(1);
+    // Load PID values from provider (persisted)
+    for (final cfg in _pidControllers) {
+      final key = '${cfg['motor']}_${cfg['pid_type']}';
+      final pid = cfg['pid_type'] == 0 ? provider.pidSpeed : provider.pidPosition;
+      _pidKp[key]!.text = pid['kp']!.toStringAsFixed(1);
+      _pidKi[key]!.text = pid['ki']!.toStringAsFixed(1);
+      _pidKd[key]!.text = pid['kd']!.toStringAsFixed(1);
+    }
   }
 
   Future<void> _saveSettings() async {

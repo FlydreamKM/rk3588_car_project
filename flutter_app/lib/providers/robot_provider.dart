@@ -270,13 +270,13 @@ class RobotProvider extends ChangeNotifier {
   }
 
   void setMotorSpeedLimit(double v) {
-    _motorSpeedLimit = v.clamp(0.1, 20.0);
+    _motorSpeedLimit = v;
     _saveMotorSettings();
     notifyListeners();
   }
 
   void setMotorAccelLimit(double v) {
-    _motorAccelLimit = v.clamp(0.1, 50.0);
+    _motorAccelLimit = v;
     _saveMotorSettings();
     notifyListeners();
   }
