@@ -82,6 +82,11 @@ class RobotProvider extends ChangeNotifier {
   static const String _prefMotorHudLocked = 'motor_hud_locked';
   static const String _prefImuHudLocked = 'imu_hud_locked';
 
+  // Camera info
+  int _cameraWidth = 640;
+  int _cameraHeight = 480;
+  List<Map<String, dynamic>> _cameraPresets = [];
+
   Map<String, dynamic> get state => _state;
   bool get connected => _connected;
   String get serverIp => _serverIp;
