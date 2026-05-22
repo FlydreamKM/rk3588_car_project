@@ -34,13 +34,17 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    try {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    } catch (e) {
+      debugPrint('SystemChrome restore error: $e');
+    }
     super.dispose();
   }
 
@@ -341,7 +345,19 @@ class _MainScreenState extends State<MainScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () => provider.applyMotorLimits(),
+                  onPressed: () {
+                    // 仅保存到本地，不发送电机M指令
+                    // 限制值由摇杆控制时自动应用
+                    provider.setMotorSpeedLimit(provider.motorSpeedLimit);
+                    provider.setMotorAccelLimit(provider.motorAccelLimit);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('电机限制已保存', style: TextStyle(color: Colors.white, fontSize: 12)),
+                        backgroundColor: Colors.orangeAccent.withOpacity(0.8),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.orangeAccent.withOpacity(0.3),
                     foregroundColor: Colors.orangeAccent,

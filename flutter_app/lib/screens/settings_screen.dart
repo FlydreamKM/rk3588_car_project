@@ -136,6 +136,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _developerMode = creds['developerMode'] as bool? ?? false;
       _commandController.text = creds['customStartCommand'] as String? ?? '';
     });
+    // Load motor limits from provider (which reads from SharedPreferences)
+    final provider = context.read<RobotProvider>();
+    _maxSpeedController.text = provider.motorSpeedLimit.toStringAsFixed(1);
+    _maxAccelController.text = provider.motorAccelLimit.toStringAsFixed(1);
   }
 
   Future<void> _saveSettings() async {
@@ -345,13 +349,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onPressed: () async {
                           final maxSpeed = double.tryParse(_maxSpeedController.text) ?? 100;
                           final maxAccel = double.tryParse(_maxAccelController.text) ?? 10;
-                          // Apply to both motors: speed mode (0) with max limits
-                          await ApiService.setMotorTarget(motor: 0, mode: 0, speed: maxSpeed, accel: maxAccel, decel: maxAccel);
-                          await ApiService.setMotorTarget(motor: 1, mode: 0, speed: maxSpeed, accel: maxAccel, decel: maxAccel);
+                          // 仅保存到本地，不发送电机M指令
+                          // 摇杆控制时自动应用限制值
+                          provider.setMotorSpeedLimit(maxSpeed);
+                          provider.setMotorAccelLimit(maxAccel);
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('电机限制已应用: 速度 ${maxSpeed.toStringAsFixed(0)} cm/s, 加速度 ${maxAccel.toStringAsFixed(0)} cm/s²', style: TextStyle(color: Colors.white)),
+                                content: Text('电机限制已保存: 速度 ${maxSpeed.toStringAsFixed(0)} cm/s, 加速度 ${maxAccel.toStringAsFixed(0)} cm/s²', style: TextStyle(color: Colors.white)),
                                 backgroundColor: Colors.cyanAccent.withOpacity(0.8),
                                 duration: Duration(seconds: 1),
                               ),

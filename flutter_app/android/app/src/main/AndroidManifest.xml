@@ -12,7 +12,9 @@
         android:label="智能小车控制中枢"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="true"
+        android:enableOnBackInvokedCallback="true"
+        android:allowBackup="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"

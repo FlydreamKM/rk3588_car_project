@@ -292,10 +292,11 @@ class RobotProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Apply motor limits to backend and persist
+  /// Apply motor limits: save to local prefs only, do NOT send M command
+  /// Limits are applied at joystick control time, not here
   Future<void> applyMotorLimits() async {
     try {
-      await ApiService.setMotorLimits(_motorSpeedLimit, _motorAccelLimit);
+      await _saveMotorSettings();
     } catch (e) {
       debugPrint('Apply motor limits error: $e');
     }

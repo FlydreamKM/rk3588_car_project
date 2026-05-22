@@ -80,9 +80,9 @@ class _JoystickControlState extends State<JoystickControl> {
       _currentAction = 'stop';
       _lastServoX = 0;
     });
-    // Soft stop: speed=0 + position mode lock instead of emergency stop
-    context.read<RobotProvider>().setMotorStopAndLock();
-    context.read<RobotProvider>().centerServo();
+    // 瞬间刹停：发送急停命令，取消位置环锁定
+    context.read<RobotProvider>().motorStop();
+    // 保持当前舵机方向，不回中
   }
 
   @override
