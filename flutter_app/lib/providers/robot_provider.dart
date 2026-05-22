@@ -446,15 +446,13 @@ class RobotProvider extends ChangeNotifier {
     try { await ApiService.motorStop(); } catch (e) { debugPrint('Stop error: $e'); }
   }
 
-  /// Soft stop: speed=0 + position mode lock at current angle
+  /// Soft stop: speed=0 with high accel/decel for instant braking (no emergency stop)
   Future<void> setMotorStopAndLock() async {
     try {
-      // Get current angles from state
-      final m1Angle = (_state['motor1']?['angle'] as num?)?.toDouble() ?? 0.0;
-      final m2Angle = (_state['motor2']?['angle'] as num?)?.toDouble() ?? 0.0;
-      // Send position mode with current angle, speed=0
-      await ApiService.setMotorTarget(motor: 0, mode: 1, speed: 0, angle: m1Angle);
-      await ApiService.setMotorTarget(motor: 1, mode: 1, speed: 0, angle: m2Angle);
+      await ApiService.setMotorTarget(
+        motor: 255, mode: 0, speed: 0, angle: 0,
+        accel: 50, decel: 50,
+      );
     } catch (e) {
       debugPrint('Soft stop error: $e');
     }

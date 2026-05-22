@@ -80,8 +80,10 @@ class _JoystickControlState extends State<JoystickControl> {
       _currentAction = 'stop';
       _lastServoX = 0;
     });
-    // 瞬间刹停：发送急停命令，取消位置环锁定
-    context.read<RobotProvider>().motorStop();
+    // 瞬间刹停：速度归零 + 高加减速度快速减速，不用急停命令
+    context.read<RobotProvider>().setMotorTarget(
+      motor: 255, mode: 0, speed: 0, angle: 0, accel: 50, decel: 50,
+    );
     // 保持当前舵机方向，不回中
   }
 
