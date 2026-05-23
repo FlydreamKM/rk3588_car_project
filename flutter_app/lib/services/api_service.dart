@@ -100,6 +100,15 @@ class ApiService {
     return jsonDecode(response.body);
   }
   
+  static Future<Map<String, dynamic>> motorBrake([int motor = 255]) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/motor/brake'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'motor': motor}),
+    );
+    return jsonDecode(response.body);
+  }
+
   static Future<Map<String, dynamic>> motorHome([int motor = 255]) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/motor/home'),

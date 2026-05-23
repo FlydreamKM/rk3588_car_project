@@ -451,6 +451,11 @@ class RobotProvider extends ChangeNotifier {
     try { await ApiService.motorStop(); } catch (e) { debugPrint('Stop error: $e'); }
   }
 
+  /// Hard brake: send B command to STM32 motor driver (short-circuit braking)
+  Future<void> motorBrake() async {
+    try { await ApiService.motorBrake(); } catch (e) { debugPrint('Brake error: $e'); }
+  }
+
   /// Soft stop: speed=0 with high accel/decel for instant braking (no emergency stop)
   Future<void> setMotorStopAndLock() async {
     try {

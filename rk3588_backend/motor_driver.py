@@ -244,6 +244,10 @@ class MotorDriver:
     def clear_fault(self, motor: int = 255):
         self.control(motor, 4)
 
+    def brake(self, motor: int = 255):
+        """B <motor>   Brake (short-circuit / dynamic braking)"""
+        self._send_text(f"B {motor}")
+
     def home(self, motor: int = 255):
         self.control(motor, 2)
 

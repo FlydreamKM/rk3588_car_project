@@ -721,6 +721,18 @@ def _soft_stop_motor(motor: int):
             angle = state['motor1']['angle'] if motor == 0 else state['motor2']['angle']
     motor_driver.set_target(motor, 1, 0.0, angle, 10.0, 10.0)
 
+@app.route('/api/motor/brake', methods=['POST'])
+def motor_brake():
+    """Hard brake: send B command to STM32 motor driver (short-circuit braking)"""
+    if not motor_connected:
+        return jsonify({"success": False, "error": "Motor not connected"}), 503
+    motor = request.json.get('motor', 255)
+    try:
+        motor_driver.brake(motor)
+        return jsonify({"success": True, "motor": motor, "action": "brake"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route('/api/motor/stop', methods=['POST'])
 def motor_stop():
     """Soft stop: set speed to 0 and lock current position (no emergency)"""
